@@ -29,6 +29,7 @@ let _wheelAnimFrame = 0;
 // Histogram throttle
 let lastHistogramTime = 0;
 const HISTOGRAM_INTERVAL = 1000 / 10; // ~10fps max
+const TONE_CURVE_LUT_SIZE = 256;
 
 type ToneCurvePoint = { x: number; y: number };
 
@@ -94,6 +95,8 @@ function init(): void {
   // Initial diagram renders
   if (state.ui.activeLayer === 'calibration') drawXYDiagram(state);
   if (state.ui.activeLayer === 'toning') drawToneCurve();
+
+  updateToneCurveGPU();
 
   // Start wheel animation loop (15fps)
   startWheelLoop();
@@ -753,6 +756,7 @@ function exportImage(): void {
   try {
     const exportRenderer = new Renderer(offCanvas);
     exportRenderer.loadImage(originalImage);
+    exportRenderer.setToneCurveLut(buildToneCurveLut());
     exportRenderer.updateUniforms(state);
     exportRenderer.render();
 
@@ -1244,6 +1248,22 @@ function resetToneCurve(pushHistory = false): void {
   drawToneCurve();
 }
 
+function buildToneCurveLut(): Float32Array {
+  const lut = new Float32Array(TONE_CURVE_LUT_SIZE);
+  for (let i = 0; i < TONE_CURVE_LUT_SIZE; i++) {
+    const t = i / (TONE_CURVE_LUT_SIZE - 1);
+    lut[i] = evalCurve(t, toneCurvePoints);
+  }
+  return lut;
+}
+
+function updateToneCurveGPU(): void {
+  if (!renderer) return;
+  renderer.setToneCurveLut(buildToneCurveLut());
+  renderer.requestRender();
+  renderer.render();
+}
+
 function handleUndoAction(): void {
   const state = store.getState();
   if (state.ui.activeLayer === 'toning' && undoToneCurve()) {
@@ -1474,6 +1494,8 @@ function drawToneCurve(): void {
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
+
+  updateToneCurveGPU();
 }
 
 /** Evaluate the tone curve at position t using monotone cubic interpolation */

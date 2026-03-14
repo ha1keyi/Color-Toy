@@ -20,6 +20,7 @@ export class Renderer {
   private canvas: HTMLCanvasElement;
   private program: WebGLProgram | null = null;
   private imageTexture: WebGLTexture | null = null;
+  private toneCurveTexture: WebGLTexture | null = null;
   private vao: WebGLVertexArrayObject | null = null; // WebGL2 only
   private posBuffer: WebGLBuffer | null = null;
   private texBuffer: WebGLBuffer | null = null;
@@ -41,6 +42,7 @@ export class Renderer {
 
   // Cached matrix to avoid recalculation
   private cachedCalibrationMatrix: Mat3 = identityMat3();
+  private readonly toneCurveLutSize = 256;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -78,6 +80,7 @@ export class Renderer {
     this.initShaders();
     this.initGeometry();
     this.initPickFBO();
+    this.initToneCurveTexture();
   }
 
   get capabilities(): RendererCapabilities {
@@ -106,10 +109,10 @@ export class Renderer {
 
     // Cache uniform locations
     const uniformNames = [
-      'u_image', 'u_primaryMatrix', 'u_globalHueShift',
+      'u_image', 'u_toneCurveTex', 'u_primaryMatrix', 'u_globalHueShift',
       'u_numMappings', 'u_exposure', 'u_contrast',
       'u_highlights', 'u_shadows', 'u_whites', 'u_blacks',
-      'u_splitPosition', 'u_splitView', 'u_enableProcessing',
+      'u_splitPosition', 'u_splitView', 'u_enableProcessing', 'u_useToneCurve',
     ];
     for (const name of uniformNames) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
@@ -189,6 +192,55 @@ export class Renderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
+  private initToneCurveTexture(): void {
+    const gl = this.gl;
+    this.toneCurveTexture = gl.createTexture();
+    if (!this.toneCurveTexture) return;
+
+    gl.bindTexture(gl.TEXTURE_2D, this.toneCurveTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    const identity = new Float32Array(this.toneCurveLutSize);
+    for (let i = 0; i < this.toneCurveLutSize; i++) {
+      identity[i] = i / (this.toneCurveLutSize - 1);
+    }
+    this.setToneCurveLut(identity);
+  }
+
+  setToneCurveLut(lut: Float32Array): void {
+    const gl = this.gl;
+    if (!this.toneCurveTexture) return;
+
+    const data = new Uint8Array(this.toneCurveLutSize * 4);
+    for (let i = 0; i < this.toneCurveLutSize; i++) {
+      const v = Math.max(0, Math.min(1, lut[Math.min(i, lut.length - 1)] ?? 0));
+      const u8 = Math.round(v * 255);
+      const o = i * 4;
+      data[o] = u8;
+      data[o + 1] = u8;
+      data[o + 2] = u8;
+      data[o + 3] = 255;
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, this.toneCurveTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      this.toneCurveLutSize,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      data
+    );
+
+    this.needsRender = true;
+  }
+
   loadImage(image: HTMLImageElement | ImageBitmap | HTMLCanvasElement): void {
     const gl = this.gl;
 
@@ -265,6 +317,7 @@ export class Renderer {
     gl.uniform1i(this.uniforms['u_splitView'], state.ui.splitView ? 1 : 0);
     gl.uniform1f(this.uniforms['u_splitPosition'], 0.5);
     gl.uniform1i(this.uniforms['u_enableProcessing'], 1);
+    gl.uniform1i(this.uniforms['u_useToneCurve'], 1);
 
     this.needsRender = true;
   }
@@ -282,6 +335,13 @@ export class Renderer {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
     gl.uniform1i(this.uniforms['u_image'], 0);
+
+    if (this.toneCurveTexture) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.toneCurveTexture);
+      gl.uniform1i(this.uniforms['u_toneCurveTex'], 1);
+      gl.activeTexture(gl.TEXTURE0);
+    }
 
     if (this.isWebGL2 && this.vao) {
       (gl as WebGL2RenderingContext).bindVertexArray(this.vao);
@@ -402,6 +462,7 @@ export class Renderer {
     const gl = this.gl;
     if (this.program) gl.deleteProgram(this.program);
     if (this.imageTexture) gl.deleteTexture(this.imageTexture);
+    if (this.toneCurveTexture) gl.deleteTexture(this.toneCurveTexture);
     if (this.posBuffer) gl.deleteBuffer(this.posBuffer);
     if (this.texBuffer) gl.deleteBuffer(this.texBuffer);
     if (this.pickFBO) gl.deleteFramebuffer(this.pickFBO);

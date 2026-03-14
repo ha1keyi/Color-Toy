@@ -20,6 +20,7 @@ in vec2 v_texCoord;
 out vec4 fragColor;
 
 uniform sampler2D u_image;
+uniform sampler2D u_toneCurveTex;
 uniform mat3 u_primaryMatrix;   // Combined calibration matrix
 uniform float u_globalHueShift; // 0-1
 uniform int u_numMappings;
@@ -33,6 +34,7 @@ uniform float u_blacks;         // -1 to +1
 uniform float u_splitPosition;  // 0-1, position of split view divider
 uniform int u_splitView;        // 0 or 1
 uniform int u_enableProcessing; // 1 = process, 0 = passthrough
+uniform int u_useToneCurve;     // 1 = apply tone curve LUT
 
 // sRGB <-> Linear (IEC 61966-2-1)
 float srgb_to_linear(float c) {
@@ -127,6 +129,14 @@ vec3 applyToning(vec3 rgb) {
   return clamp(rgb, 0.0, 1.0);
 }
 
+vec3 applyToneCurve(vec3 rgb) {
+  if (u_useToneCurve == 0) return rgb;
+  float r = texture(u_toneCurveTex, vec2(clamp(rgb.r, 0.0, 1.0), 0.5)).r;
+  float g = texture(u_toneCurveTex, vec2(clamp(rgb.g, 0.0, 1.0), 0.5)).r;
+  float b = texture(u_toneCurveTex, vec2(clamp(rgb.b, 0.0, 1.0), 0.5)).r;
+  return vec3(r, g, b);
+}
+
 void main() {
   vec4 texColor = texture(u_image, v_texCoord);
 
@@ -187,6 +197,7 @@ void main() {
 
   // Step 5: Linear -> sRGB output
   vec3 outputRGB = linear_to_srgb_v(tonedRGB);
+  outputRGB = applyToneCurve(outputRGB);
 
   fragColor = vec4(clamp(outputRGB, 0.0, 1.0), texColor.a);
 }
@@ -212,6 +223,7 @@ precision highp float;
 varying vec2 v_texCoord;
 
 uniform sampler2D u_image;
+uniform sampler2D u_toneCurveTex;
 uniform mat3 u_primaryMatrix;
 uniform float u_globalHueShift;
 uniform int u_numMappings;
@@ -225,6 +237,7 @@ uniform float u_blacks;
 uniform float u_splitPosition;
 uniform int u_splitView;
 uniform int u_enableProcessing;
+uniform int u_useToneCurve;
 
 float srgb_to_linear(float c) {
   return (c <= 0.04045) ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4);
@@ -296,6 +309,14 @@ vec3 applyToning(vec3 rgb) {
   return clamp(rgb, 0.0, 1.0);
 }
 
+vec3 applyToneCurve(vec3 rgb) {
+  if (u_useToneCurve == 0) return rgb;
+  float r = texture2D(u_toneCurveTex, vec2(clamp(rgb.r, 0.0, 1.0), 0.5)).r;
+  float g = texture2D(u_toneCurveTex, vec2(clamp(rgb.g, 0.0, 1.0), 0.5)).r;
+  float b = texture2D(u_toneCurveTex, vec2(clamp(rgb.b, 0.0, 1.0), 0.5)).r;
+  return vec3(r, g, b);
+}
+
 void main() {
   vec4 texColor = texture2D(u_image, v_texCoord);
   if (u_splitView == 1 && v_texCoord.x < u_splitPosition) {
@@ -338,6 +359,7 @@ void main() {
   vec3 mappedRGB = hsv2rgb(hsv);
   vec3 tonedRGB = applyToning(mappedRGB);
   vec3 outputRGB = linear_to_srgb_v(tonedRGB);
+  outputRGB = applyToneCurve(outputRGB);
   gl_FragColor = vec4(clamp(outputRGB, 0.0, 1.0), texColor.a);
 }
 `;
