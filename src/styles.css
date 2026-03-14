@@ -925,6 +925,16 @@ html, body {
   touch-action: none;
 }
 
+.tone-curve-controls {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.tone-curve-controls .small-btn {
+  flex: 1;
+}
+
 /* ============ Mapping List ============ */
 .mapping-list {
   display: flex;
@@ -1001,6 +1011,13 @@ html, body {
 }
 
 .small-btn:active { transform: scale(0.96); }
+
+.small-btn.active {
+  background: var(--accent-surface);
+  border-color: var(--border-glow);
+  color: var(--text-primary);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.14);
+}
 
 .small-btn.danger {
   border-color: rgba(239, 68, 68, 0.2);

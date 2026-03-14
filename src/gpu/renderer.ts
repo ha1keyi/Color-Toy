@@ -317,7 +317,8 @@ export class Renderer {
     gl.uniform1i(this.uniforms['u_splitView'], state.ui.splitView ? 1 : 0);
     gl.uniform1f(this.uniforms['u_splitPosition'], 0.5);
     gl.uniform1i(this.uniforms['u_enableProcessing'], 1);
-    gl.uniform1i(this.uniforms['u_useToneCurve'], 1);
+    const useToneCurve = state.ui.toneCurveEnabled && !state.ui.toneCurveBypassPreview;
+    gl.uniform1i(this.uniforms['u_useToneCurve'], useToneCurve ? 1 : 0);
 
     this.needsRender = true;
   }

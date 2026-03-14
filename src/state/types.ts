@@ -47,6 +47,8 @@ export interface UIState {
   splitView: boolean;
   colorPickerActive: boolean;
   showXYPanel: boolean;
+  toneCurveEnabled: boolean;
+  toneCurveBypassPreview: boolean;
 }
 
 export interface AppState {
@@ -147,6 +149,8 @@ export function createInitialState(): AppState {
       splitView: false,
       colorPickerActive: false,
       showXYPanel: false,
+      toneCurveEnabled: true,
+      toneCurveBypassPreview: false,
     },
     imageLoaded: false,
   };

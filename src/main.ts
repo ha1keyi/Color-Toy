@@ -273,12 +273,18 @@ function setupToolbar(): void {
   const resetAllBtn = document.getElementById('reset-all-btn');
   if (resetAllBtn) {
     resetAllBtn.addEventListener('click', () => {
+      const state = store.getState();
       store.update({
         calibration: { ...DEFAULT_CALIBRATION },
         primaries: { ...DEFAULT_PRIMARIES },
         localMappings: [],
         globalHueShift: 0,
         toning: { ...DEFAULT_TONING },
+        ui: {
+          ...state.ui,
+          toneCurveEnabled: true,
+          toneCurveBypassPreview: false,
+        },
       }, true);
       resetToneCurve(true);
     });
@@ -300,8 +306,14 @@ function setupToolbar(): void {
           globalHueShift: 0,
         }, true);
       } else if (module === 'toning') {
+        const state = store.getState();
         store.update({
           toning: { ...DEFAULT_TONING },
+          ui: {
+            ...state.ui,
+            toneCurveEnabled: true,
+            toneCurveBypassPreview: false,
+          },
         }, true);
         resetToneCurve(true);
       }
@@ -396,6 +408,7 @@ function setupPanels(): void {
   setupCalibrationSliders();
   setupXYInputs();
   setupToningSliders();
+  setupToneCurveControls();
   setupMappingControls();
 }
 
@@ -594,6 +607,47 @@ function setupToningSliders(): void {
       store.update({ globalHueShift: parseFloat(hueSlider.value) }, true);
     });
   }
+}
+
+function setupToneCurveControls(): void {
+  const enableBtn = document.getElementById('tone-curve-enable-btn') as HTMLButtonElement | null;
+  const bypassBtn = document.getElementById('tone-curve-bypass-btn') as HTMLButtonElement | null;
+  if (!enableBtn || !bypassBtn) return;
+
+  enableBtn.addEventListener('click', () => {
+    const state = store.getState();
+    store.update({
+      ui: {
+        ...state.ui,
+        toneCurveEnabled: !state.ui.toneCurveEnabled,
+      },
+    }, true);
+  });
+
+  bypassBtn.addEventListener('click', () => {
+    const state = store.getState();
+    store.update({
+      ui: {
+        ...state.ui,
+        toneCurveBypassPreview: !state.ui.toneCurveBypassPreview,
+      },
+    });
+  });
+
+  updateToneCurveControlUI(store.getState());
+}
+
+function updateToneCurveControlUI(state: AppState): void {
+  const enableBtn = document.getElementById('tone-curve-enable-btn') as HTMLButtonElement | null;
+  const bypassBtn = document.getElementById('tone-curve-bypass-btn') as HTMLButtonElement | null;
+  if (!enableBtn || !bypassBtn) return;
+
+  enableBtn.textContent = state.ui.toneCurveEnabled ? 'Tone Curve: On' : 'Tone Curve: Off';
+  enableBtn.classList.toggle('active', state.ui.toneCurveEnabled);
+
+  bypassBtn.textContent = state.ui.toneCurveBypassPreview ? 'A/B: Bypass' : 'A/B: Processed';
+  bypassBtn.classList.toggle('active', state.ui.toneCurveBypassPreview);
+  bypassBtn.disabled = !state.ui.toneCurveEnabled;
 }
 
 // ============ Mapping Controls ============
@@ -1756,6 +1810,7 @@ function updatePanelUI(state: AppState): void {
   updateSlider('whites-slider', state.toning.whites);
   updateSlider('blacks-slider', state.toning.blacks);
   updateSlider('global-hue-slider', state.globalHueShift);
+  updateToneCurveControlUI(state);
 
   // Mapping detail panel
   updateMappingDetail(state);
