@@ -43,12 +43,16 @@ function init(): void {
     return;
   }
 
+  // Always wire file input first so upload button works even if later init fails.
+  setupImageInput();
+
   // Initialize renderer
   try {
     renderer = new Renderer(glCanvas);
     updateCapabilitiesDisplay();
   } catch (e) {
-    showError('WebGL not supported. Please use a modern browser.');
+    const details = e instanceof Error ? e.message : String(e);
+    showError(`WebGL initialization failed: ${details}`);
     return;
   }
 
@@ -70,7 +74,6 @@ function init(): void {
 
   // Setup UI event handlers
   setupLayerTabs();
-  setupImageInput();
   setupToolbar();
   setupSplitDivider();
   setupPanels();
@@ -163,8 +166,28 @@ function setupImageInput(): void {
   const dropZone = document.getElementById('drop-zone') as HTMLElement;
   const loadBtn = document.getElementById('load-image-btn') as HTMLElement;
 
+  const triggerPicker = (e?: Event) => {
+    if (!input) return;
+    if (e) e.preventDefault();
+    try {
+      const maybeShowPicker = (input as HTMLInputElement & { showPicker?: () => void }).showPicker;
+      if (typeof maybeShowPicker === 'function') {
+        maybeShowPicker.call(input);
+        return;
+      }
+    } catch {
+      // Fallback to click below.
+    }
+    input.click();
+  };
+
   if (loadBtn) {
-    loadBtn.addEventListener('click', () => input?.click());
+    loadBtn.addEventListener('click', triggerPicker);
+    loadBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        triggerPicker(e);
+      }
+    });
   }
 
   if (input) {
@@ -193,6 +216,10 @@ function setupImageInput(): void {
 
 function loadImageFile(file: File): void {
   if (!file.type.startsWith('image/')) return;
+  if (!renderer) {
+    showError('Renderer is not initialized, image cannot be processed.');
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = (e) => {

@@ -148,6 +148,9 @@ html, body {
 }
 
 .primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 6px 18px;
   background: var(--accent);
   color: white;
@@ -591,7 +594,6 @@ html, body {
   appearance: none;
   background: var(--track-bg);
   border-radius: 2px;
-  outline: none;
   cursor: pointer;
   position: relative;
 }

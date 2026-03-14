@@ -47,23 +47,37 @@ export class Renderer {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
 
-    // Try WebGL 2.0 first
-    let gl = canvas.getContext('webgl2', {
+    // Try WebGL2/WebGL1 with strict and relaxed options to maximize compatibility.
+    const strictAttrs = {
       alpha: false,
       antialias: false,
       premultipliedAlpha: false,
       preserveDrawingBuffer: true,
-    }) as WebGL2RenderingContext | null;
+    } as const;
 
+    const relaxedAttrs = {
+      alpha: true,
+      antialias: true,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: false,
+    } as const;
+
+    let gl = canvas.getContext('webgl2', strictAttrs) as WebGL2RenderingContext | null;
     this.isWebGL2 = !!gl;
 
     if (!gl) {
-      gl = canvas.getContext('webgl', {
-        alpha: false,
-        antialias: false,
-        premultipliedAlpha: false,
-        preserveDrawingBuffer: true,
-      }) as WebGL2RenderingContext | null;
+      gl = canvas.getContext('webgl2', relaxedAttrs) as WebGL2RenderingContext | null;
+      this.isWebGL2 = !!gl;
+    }
+
+    if (!gl) {
+      gl = canvas.getContext('webgl', strictAttrs) as WebGLRenderingContext | null;
+      this.isWebGL2 = false;
+    }
+
+    if (!gl) {
+      gl = canvas.getContext('webgl', relaxedAttrs) as WebGLRenderingContext | null;
+      this.isWebGL2 = false;
     }
 
     if (!gl) {
