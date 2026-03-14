@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d0d14">
+  <title>Color Toy</title>
+  <script type="module" src="/src/main.ts"></script>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="header">
+      <div class="header-left">
+        <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 10h10a5 5 0 0 1 0 10H8"/><path d="M3 10l5-5M3 10l5 5"/></svg>
+        </button>
+        <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Shift+Z)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10H11a5 5 0 0 0 0 10h5"/><path d="M21 10l-5-5M21 10l-5 5"/></svg>
+        </button>
+      </div>
+      <h1 class="header-title">Color Toy</h1>
+      <div class="header-right">
+        <span id="fps-counter" class="fps-badge">-- FPS</span>
+        <button id="export-btn" class="primary-btn">Export</button>
+      </div>
+    </header>
+
+    <!-- Error message -->
+    <div id="error-msg" style="display:none"></div>
+
+    <!-- Preview Area -->
+    <div id="preview-container">
+      <div id="drop-zone">
+        <div class="drop-content">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <p>Drop image here or</p>
+          <button id="load-image-btn" class="primary-btn">Choose Image</button>
+          <p class="hint">JPG, PNG, WebP</p>
+        </div>
+        <input type="file" id="image-input" accept="image/jpeg,image/png,image/webp" hidden>
+      </div>
+      <canvas id="gl-canvas" style="display:none"></canvas>
+    </div>
+
+    <!-- Controls Sidebar -->
+    <div id="controls">
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <button id="picker-btn" class="tool-btn" title="Color Picker">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Picker</span>
+        </button>
+        <button id="split-btn" class="tool-btn" title="Split View">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+          <span>Split</span>
+        </button>
+        <button id="reset-all-btn" class="tool-btn" title="Reset All">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          <span>Reset All</span>
+        </button>
+      </div>
+
+      <!-- Layer Tabs: Calibration (1), Hue Map (2), Toning (3) -->
+      <div id="layer-tabs">
+        <button class="layer-tab" data-layer="calibration">
+          <span class="tab-num">1</span>Calibration
+        </button>
+        <button class="layer-tab" data-layer="mapping">
+          <span class="tab-num">2</span>Hue Map
+        </button>
+        <button class="layer-tab active" data-layer="toning">
+          <span class="tab-num">3</span>Toning
+        </button>
+      </div>
+
+      <!-- Dual Wheels Row -->
+      <div id="wheels-row">
+        <div class="wheel-col">
+          <div class="wheel-label">Edit</div>
+          <div id="wheel-container">
+            <canvas id="wheel-canvas"></canvas>
+          </div>
+        </div>
+        <div class="wheel-col">
+          <div class="wheel-label">Result</div>
+          <div id="rendered-wheel-container">
+            <canvas id="rendered-wheel-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dynamic Panels -->
+      <div id="panels">
+        <!-- Calibration Panel -->
+        <div id="calibration-panel" class="panel" style="display:none">
+          <div class="panel-header">
+            <h3 class="panel-title">Calibration</h3>
+            <button class="reset-module-btn" data-module="calibration" title="Reset Calibration">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+          </div>
+          <!-- Red Primary -->
+          <div class="cal-channel">
+            <span class="cal-label red">R</span>
+            <div class="cal-sliders">
+              <div class="slider-row">
+                <label>Hue</label>
+                <input type="range" id="red-hue-slider" min="-180" max="180" step="0.1" value="0">
+                <input type="number" id="red-hue-slider-val" class="val-input" step="0.1" value="0.0">
+              </div>
+              <div class="slider-row">
+                <label>Saturation</label>
+                <input type="range" id="red-sat-slider" min="-100" max="100" step="1" value="0">
+                <input type="number" id="red-sat-slider-val" class="val-input" step="1" value="0">
+              </div>
+            </div>
+          </div>
+          <!-- Green Primary -->
+          <div class="cal-channel">
+            <span class="cal-label green">G</span>
+            <div class="cal-sliders">
+              <div class="slider-row">
+                <label>Hue</label>
+                <input type="range" id="green-hue-slider" min="-180" max="180" step="0.1" value="0">
+                <input type="number" id="green-hue-slider-val" class="val-input" step="0.1" value="0.0">
+              </div>
+              <div class="slider-row">
+                <label>Saturation</label>
+                <input type="range" id="green-sat-slider" min="-100" max="100" step="1" value="0">
+                <input type="number" id="green-sat-slider-val" class="val-input" step="1" value="0">
+              </div>
+            </div>
+          </div>
+          <!-- Blue Primary -->
+          <div class="cal-channel">
+            <span class="cal-label blue">B</span>
+            <div class="cal-sliders">
+              <div class="slider-row">
+                <label>Hue</label>
+                <input type="range" id="blue-hue-slider" min="-180" max="180" step="0.1" value="0">
+                <input type="number" id="blue-hue-slider-val" class="val-input" step="0.1" value="0.0">
+              </div>
+              <div class="slider-row">
+                <label>Saturation</label>
+                <input type="range" id="blue-sat-slider" min="-100" max="100" step="1" value="0">
+                <input type="number" id="blue-sat-slider-val" class="val-input" step="1" value="0">
+              </div>
+            </div>
+          </div>
+
+          <!-- xy Chromaticity Diagram -->
+          <div id="xy-diagram-container">
+            <canvas id="xy-diagram-canvas" width="300" height="300"></canvas>
+          </div>
+
+          <!-- Collapsible xy Chromaticity Panel -->
+          <div id="xy-panel-toggle" class="collapsible-toggle">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" id="xy-toggle-arrow"><path d="M9 18l6-6-6-6"/></svg>
+            <span>xy Chromaticity (Advanced)</span>
+          </div>
+          <div id="xy-panel" class="collapsible-content" style="display:none">
+            <div class="xy-row">
+              <span class="primary-label red">R</span>
+              <div class="xy-input-group">
+                <label>x</label>
+                <input type="number" id="red-x-input" step="0.001" min="0.01" max="0.99" value="0.6400" class="xy-input">
+              </div>
+              <div class="xy-input-group">
+                <label>y</label>
+                <input type="number" id="red-y-input" step="0.001" min="0.01" max="0.99" value="0.3300" class="xy-input">
+              </div>
+            </div>
+            <div class="xy-row">
+              <span class="primary-label green">G</span>
+              <div class="xy-input-group">
+                <label>x</label>
+                <input type="number" id="green-x-input" step="0.001" min="0.01" max="0.99" value="0.3000" class="xy-input">
+              </div>
+              <div class="xy-input-group">
+                <label>y</label>
+                <input type="number" id="green-y-input" step="0.001" min="0.01" max="0.99" value="0.6000" class="xy-input">
+              </div>
+            </div>
+            <div class="xy-row">
+              <span class="primary-label blue">B</span>
+              <div class="xy-input-group">
+                <label>x</label>
+                <input type="number" id="blue-x-input" step="0.001" min="0.01" max="0.99" value="0.1500" class="xy-input">
+              </div>
+              <div class="xy-input-group">
+                <label>y</label>
+                <input type="number" id="blue-y-input" step="0.001" min="0.01" max="0.99" value="0.0600" class="xy-input">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hue Mapping Panel -->
+        <div id="mapping-panel" class="panel" style="display:none">
+          <div class="panel-header">
+            <h3 class="panel-title">Hue Mapping</h3>
+            <button class="reset-module-btn" data-module="mapping" title="Reset Hue Mapping">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+          </div>
+          <div class="slider-row">
+            <label>Global Hue</label>
+            <input type="range" id="global-hue-slider" min="0" max="1" step="0.001" value="0">
+            <input type="number" id="global-hue-slider-val" class="val-input" step="0.001" value="0.00">
+          </div>
+          <div id="mapping-list" class="mapping-list"></div>
+          <div class="mapping-actions">
+            <button id="add-mapping-btn" class="small-btn">+ Add Point</button>
+            <button id="delete-mapping-btn" class="small-btn danger">Delete</button>
+          </div>
+          <div id="mapping-detail" style="display:none">
+            <h4>Control Point</h4>
+            <div class="slider-row">
+              <label>Source</label>
+              <input type="range" id="mapping-src-slider" min="0" max="1" step="0.001" value="0">
+              <input type="number" id="mapping-src-slider-val" class="val-input" step="0.001" value="0.00">
+            </div>
+            <div class="slider-row">
+              <label>Target</label>
+              <input type="range" id="mapping-dst-slider" min="0" max="1" step="0.001" value="0">
+              <input type="number" id="mapping-dst-slider-val" class="val-input" step="0.001" value="0.00">
+            </div>
+            <div class="slider-row">
+              <label>Range</label>
+              <input type="range" id="mapping-range-slider" min="0.01" max="0.5" step="0.001" value="0.083">
+              <input type="number" id="mapping-range-slider-val" class="val-input" step="0.001" value="0.08">
+            </div>
+            <div class="slider-row">
+              <label>Strength</label>
+              <input type="range" id="mapping-strength-slider" min="0" max="1" step="0.01" value="1">
+              <input type="number" id="mapping-strength-slider-val" class="val-input" step="0.001" value="1.00">
+            </div>
+          </div>
+        </div>
+
+        <!-- Toning Panel -->
+        <div id="toning-panel" class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Toning</h3>
+            <button class="reset-module-btn" data-module="toning" title="Reset Toning">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+          </div>
+          <!-- Histogram -->
+          <div id="histogram-container">
+            <canvas id="histogram-canvas" width="320" height="60"></canvas>
+          </div>
+          <!-- Tone Curve -->
+          <div id="tone-curve-container">
+            <canvas id="tone-curve-canvas" width="256" height="256"></canvas>
+          </div>
+          <div class="slider-row">
+            <label>Exposure</label>
+            <input type="range" id="exposure-slider" min="-2" max="2" step="0.01" value="0">
+            <input type="number" id="exposure-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row">
+            <label>Contrast</label>
+            <input type="range" id="contrast-slider" min="0.5" max="2" step="0.01" value="1">
+            <input type="number" id="contrast-slider-val" class="val-input" step="0.01" value="1.00">
+          </div>
+          <div class="slider-row">
+            <label>Highlights</label>
+            <input type="range" id="highlights-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="highlights-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row">
+            <label>Shadows</label>
+            <input type="range" id="shadows-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="shadows-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row">
+            <label>Whites</label>
+            <input type="range" id="whites-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="whites-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row">
+            <label>Blacks</label>
+            <input type="range" id="blacks-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="blacks-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Bar -->
+    <div id="bottom-bar">
+      <div id="preset-section">
+        <div id="preset-list" class="preset-list"></div>
+        <div class="preset-actions">
+          <button id="save-preset-btn" class="small-btn">Save Preset</button>
+          <button id="import-preset-btn" class="small-btn">Import</button>
+        </div>
+      </div>
+      <div id="capabilities" class="caps-badge"></div>
+    </div>
+  </div>
+
+  <script src="./assets/patch-runtime.js"></script>
+</body>
+</html>
