@@ -45,6 +45,7 @@ export interface UIState {
   selectedMappingId: string | null;
   previewResolution: 1080 | 720 | 512;
   splitView: boolean;
+  splitPosition: number;
   colorPickerActive: boolean;
   showXYPanel: boolean;
   toneCurveEnabled: boolean;
@@ -147,6 +148,7 @@ export function createInitialState(): AppState {
       selectedMappingId: null,
       previewResolution: 1080,
       splitView: false,
+      splitPosition: 0.5,
       colorPickerActive: false,
       showXYPanel: false,
       toneCurveEnabled: true,

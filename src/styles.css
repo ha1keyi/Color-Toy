@@ -204,6 +204,32 @@ html, body {
   display: block;
 }
 
+#split-divider {
+  position: absolute;
+  width: 0;
+  border-left: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+  z-index: 5;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+.split-divider-handle {
+  width: 18px;
+  height: 28px;
+  border-radius: 12px;
+  background: rgba(8, 8, 14, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  position: absolute;
+}
+
+#split-divider:hover .split-divider-handle {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
 #drop-zone {
   position: absolute;
   inset: 12px;

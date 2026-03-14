@@ -72,6 +72,7 @@ function init(): void {
   setupLayerTabs();
   setupImageInput();
   setupToolbar();
+  setupSplitDivider();
   setupPanels();
   setupPresets();
   setupExport();
@@ -282,6 +283,7 @@ function setupToolbar(): void {
         toning: { ...DEFAULT_TONING },
         ui: {
           ...state.ui,
+          splitPosition: 0.5,
           toneCurveEnabled: true,
           toneCurveBypassPreview: false,
         },
@@ -328,7 +330,6 @@ function setupToolbar(): void {
       store.update({
         ui: { ...state.ui, splitView: !state.ui.splitView },
       });
-      splitBtn.classList.toggle('active', !state.ui.splitView);
     });
   }
 
@@ -356,6 +357,87 @@ function setupToolbar(): void {
       }
     });
   }
+}
+
+function setupSplitDivider(): void {
+  const divider = document.getElementById('split-divider');
+  const container = document.getElementById('preview-container');
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  if (!divider || !container || !glCanvas) return;
+
+  let dragging = false;
+  let lastClientX = 0;
+
+  const updateFromClientX = (clientX: number, commitHistory: boolean) => {
+    lastClientX = clientX;
+    const canvasRect = glCanvas.getBoundingClientRect();
+    if (canvasRect.width <= 0) return;
+    const nx = (clientX - canvasRect.left) / canvasRect.width;
+    const clamped = Math.max(0, Math.min(1, nx));
+    const state = store.getState();
+    store.update({
+      ui: { ...state.ui, splitPosition: clamped },
+    }, commitHistory);
+  };
+
+  divider.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    updateFromClientX(e.clientX, false);
+  });
+
+  window.addEventListener('mouseup', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    updateFromClientX(e.clientX, true);
+  });
+
+  divider.addEventListener('touchstart', (e) => {
+    if (!e.touches[0]) return;
+    dragging = true;
+    e.preventDefault();
+  }, { passive: false });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!dragging || !e.touches[0]) return;
+    updateFromClientX(e.touches[0].clientX, false);
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    if (dragging) {
+      updateFromClientX(lastClientX, true);
+    }
+    dragging = false;
+  });
+
+  container.addEventListener('dblclick', (e) => {
+    const state = store.getState();
+    if (!state.ui.splitView) return;
+    updateFromClientX((e as MouseEvent).clientX, true);
+  });
+}
+
+function updateSplitDividerUI(state: AppState): void {
+  const divider = document.getElementById('split-divider') as HTMLElement | null;
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  const container = document.getElementById('preview-container') as HTMLElement | null;
+  if (!divider || !glCanvas || !container) return;
+
+  const visible = state.ui.splitView && state.imageLoaded;
+  divider.style.display = visible ? 'flex' : 'none';
+  if (!visible) return;
+
+  const canvasRect = glCanvas.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const splitX = canvasRect.left - containerRect.left + canvasRect.width * state.ui.splitPosition;
+
+  divider.style.left = `${Math.round(splitX)}px`;
+  divider.style.top = `${Math.round(canvasRect.top - containerRect.top)}px`;
+  divider.style.height = `${Math.round(canvasRect.height)}px`;
 }
 
 function setupWheelCompareToggle(): void {
@@ -1786,6 +1868,9 @@ function updatePanelUI(state: AppState): void {
   // Hide wheels for toning tab
   if (wheelsRow) wheelsRow.style.display = state.ui.activeLayer === 'toning' ? 'none' : 'flex';
 
+  const splitBtn = document.getElementById('split-btn');
+  if (splitBtn) splitBtn.classList.toggle('active', state.ui.splitView);
+
   // Update calibration slider values
   updateSlider('red-hue-slider', state.calibration.red.hueShift);
   updateSlider('red-sat-slider', state.calibration.red.saturation);
@@ -1827,6 +1912,8 @@ function updatePanelUI(state: AppState): void {
   if (arrow) {
     arrow.style.transform = state.ui.showXYPanel ? 'rotate(180deg)' : 'rotate(0deg)';
   }
+
+  updateSplitDividerUI(state);
 }
 
 function updateSlider(id: string, value: number): void {
@@ -1931,6 +2018,8 @@ function handleResize(): void {
       renderer.render();
     }
   }
+
+  updateSplitDividerUI(state);
 }
 
 function startWheelLoop(): void {
