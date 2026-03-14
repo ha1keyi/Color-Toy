@@ -393,6 +393,50 @@ html, body {
   padding: 0 8px;
 }
 
+.wheel-compare-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 4px 14px 2px;
+}
+
+#wheel-compare-btn {
+  min-width: 180px;
+  text-align: center;
+}
+
+#wheels-row.wheels-compare-swap {
+  flex-direction: row-reverse;
+}
+
+#wheels-row.wheels-compare-inside {
+  position: relative;
+  justify-content: center;
+  min-height: 200px;
+}
+
+#wheels-row.wheels-compare-inside .wheel-col {
+  flex: 0 0 auto;
+}
+
+#wheels-row.wheels-compare-inside .wheel-col:first-child {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: 46%;
+  max-width: 120px;
+}
+
+#wheels-row.wheels-compare-inside .wheel-col:last-child {
+  width: 100%;
+  max-width: 220px;
+}
+
+#wheels-row.wheels-compare-inside .wheel-col:first-child .wheel-label {
+  color: rgba(255,255,255,0.8);
+}
+
 .wheel-col {
   flex: 1;
   display: flex;
@@ -1109,6 +1153,14 @@ html, body {
   #wheels-row {
     flex-direction: row;
     padding: 0 6px;
+  }
+
+  #wheels-row.wheels-compare-inside {
+    min-height: 220px;
+  }
+
+  #wheels-row.wheels-compare-inside .wheel-col:first-child {
+    max-width: 140px;
   }
 
   .wheel-col { flex: 1; }

@@ -15,7 +15,6 @@ import {
   SRGB_RED_XY,
   SRGB_GREEN_XY,
   SRGB_BLUE_XY,
-  calibrationToPrimaries,
 } from '../../state/types';
 import {
   buildCalibrationMatrix,
@@ -97,6 +96,50 @@ function canvasAngleToHue(angle: number): number {
   if (hue < 0) hue += 1;
   if (hue >= 1) hue -= 1;
   return hue;
+}
+
+function wrapHue01(h: number): number {
+  let hue = h % 1;
+  if (hue < 0) hue += 1;
+  return hue;
+}
+
+function shortestHueDelta(from: number, to: number): number {
+  let d = to - from;
+  if (d > 0.5) d -= 1;
+  if (d < -0.5) d += 1;
+  return d;
+}
+
+function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+
+  if (d > 1e-10) {
+    if (max === r) {
+      h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    } else if (max === g) {
+      h = ((b - r) / d + 2) / 6;
+    } else {
+      h = ((r - g) / d + 4) / 6;
+    }
+  }
+
+  const s = max <= 0 ? 0 : d / max;
+  return { h, s, v: max };
+}
+
+function applyHueMappings(hue: number, state: AppState): number {
+  let localShift = 0;
+  for (const m of state.localMappings) {
+    const dist = Math.abs(shortestHueDelta(hue, m.srcHue));
+    const sigma = Math.max(m.range, 0.001);
+    const weight = Math.exp(-(dist * dist) / (2 * sigma * sigma)) * m.strength;
+    localShift += shortestHueDelta(m.srcHue, m.dstHue) * weight;
+  }
+  return wrapHue01(hue + state.globalHueShift + localShift);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,8 +285,13 @@ export class ColorWheel {
       state.primaries.blue
     );
 
-    // Draw the transformed hue ring
-    this.drawHueRingTransformed(ctx, center, radius, innerRadius, calibMatrix);
+    // Draw the transformed hue ring (calibration + mapping/global hue)
+    this.drawHueRing(ctx, center, radius, innerRadius, (r, g, b) => {
+      const calibrated = calibMatrix ? mulMat3Vec3(calibMatrix, [r, g, b]) : [r, g, b] as [number, number, number];
+      const hsv = rgbToHsv(calibrated[0], calibrated[1], calibrated[2]);
+      const mappedHue = applyHueMappings(hsv.h, state);
+      return hsvToRgb(mappedHue, hsv.s, hsv.v);
+    });
 
     switch (state.ui.activeLayer) {
       case 'calibration':
@@ -348,7 +396,7 @@ export class ColorWheel {
    * is derived from calibrationToPrimaries(state.calibration).
    */
   private drawCalibrationMarkers(ctx: CanvasRenderingContext2D, state: AppState): void {
-    const shiftedPrimaries = calibrationToPrimaries(state.calibration);
+    const shiftedPrimaries = state.primaries;
 
     const markers = [
       { fixedXY: SRGB_RED_XY, shiftedXY: shiftedPrimaries.red, color: '#ff3333', label: 'R' },
@@ -420,7 +468,7 @@ export class ColorWheel {
     radius: number,
     innerRadius: number,
   ): void {
-    const calibratedPrimaries = calibrationToPrimaries(state.calibration);
+    const calibratedPrimaries = state.primaries;
 
     const colors = [
       { xy: calibratedPrimaries.red, color: '#ff3333', label: 'R' },

@@ -30,6 +30,8 @@ let _wheelAnimFrame = 0;
 let lastHistogramTime = 0;
 const HISTOGRAM_INTERVAL = 1000 / 10; // ~10fps max
 
+type ToneCurvePoint = { x: number; y: number };
+
 function init(): void {
   const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
   const wheelCanvas = document.getElementById('wheel-canvas') as HTMLCanvasElement;
@@ -74,6 +76,7 @@ function init(): void {
   setupExport();
   setupKeyboard();
   setupPerformanceMonitor();
+  setupWheelCompareToggle();
   setupXYPanelToggle();
   setupValInputs();
   setupDoubleClickReset();
@@ -274,6 +277,7 @@ function setupToolbar(): void {
         globalHueShift: 0,
         toning: { ...DEFAULT_TONING },
       }, true);
+      resetToneCurve(true);
     });
   }
 
@@ -296,6 +300,7 @@ function setupToolbar(): void {
         store.update({
           toning: { ...DEFAULT_TONING },
         }, true);
+        resetToneCurve(true);
       }
     });
   });
@@ -315,8 +320,8 @@ function setupToolbar(): void {
   // Undo/Redo
   const undoBtn = document.getElementById('undo-btn');
   const redoBtn = document.getElementById('redo-btn');
-  if (undoBtn) undoBtn.addEventListener('click', () => store.undo());
-  if (redoBtn) redoBtn.addEventListener('click', () => store.redo());
+  if (undoBtn) undoBtn.addEventListener('click', handleUndoAction);
+  if (redoBtn) redoBtn.addEventListener('click', handleRedoAction);
 
   // Canvas click for color picker
   const glCanvas = document.getElementById('gl-canvas');
@@ -336,6 +341,28 @@ function setupToolbar(): void {
       }
     });
   }
+}
+
+function setupWheelCompareToggle(): void {
+  const btn = document.getElementById('wheel-compare-btn');
+  const row = document.getElementById('wheels-row');
+  if (!btn || !row) return;
+
+  const labels = ['Compare: Left/Right', 'Compare: Right/Left', 'Compare: Inside/Outside'];
+  let mode = 0;
+
+  const applyMode = () => {
+    row.classList.remove('wheels-compare-swap', 'wheels-compare-inside');
+    if (mode === 1) row.classList.add('wheels-compare-swap');
+    if (mode === 2) row.classList.add('wheels-compare-inside');
+    btn.textContent = labels[mode];
+  };
+
+  applyMode();
+  btn.addEventListener('click', () => {
+    mode = (mode + 1) % labels.length;
+    applyMode();
+  });
 }
 
 function handleColorPicked(hue: number, _saturation: number): void {
@@ -753,10 +780,10 @@ function setupKeyboard(): void {
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        store.undo();
+        handleUndoAction();
       } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
         e.preventDefault();
-        store.redo();
+        handleRedoAction();
       } else if (e.key === 's') {
         e.preventDefault();
         exportImage();
@@ -1164,10 +1191,82 @@ let toneCurvePoints: { x: number; y: number }[] = [
   { x: 1, y: 1 },
 ];
 let tcDragIdx: number | null = null;
+let toneCurveHistory: ToneCurvePoint[][] = [];
+let toneCurveHistoryIndex = -1;
+
+function cloneToneCurvePoints(points: ToneCurvePoint[]): ToneCurvePoint[] {
+  return points.map((p) => ({ x: p.x, y: p.y }));
+}
+
+function pushToneCurveHistory(): void {
+  const snapshot = cloneToneCurvePoints(toneCurvePoints);
+  toneCurveHistory = toneCurveHistory.slice(0, toneCurveHistoryIndex + 1);
+  toneCurveHistory.push(snapshot);
+  if (toneCurveHistory.length > 40) {
+    toneCurveHistory.shift();
+  }
+  toneCurveHistoryIndex = toneCurveHistory.length - 1;
+}
+
+function canUndoToneCurve(): boolean {
+  return toneCurveHistoryIndex > 0;
+}
+
+function canRedoToneCurve(): boolean {
+  return toneCurveHistoryIndex >= 0 && toneCurveHistoryIndex < toneCurveHistory.length - 1;
+}
+
+function undoToneCurve(): boolean {
+  if (!canUndoToneCurve()) return false;
+  toneCurveHistoryIndex--;
+  toneCurvePoints = cloneToneCurvePoints(toneCurveHistory[toneCurveHistoryIndex]);
+  drawToneCurve();
+  return true;
+}
+
+function redoToneCurve(): boolean {
+  if (!canRedoToneCurve()) return false;
+  toneCurveHistoryIndex++;
+  toneCurvePoints = cloneToneCurvePoints(toneCurveHistory[toneCurveHistoryIndex]);
+  drawToneCurve();
+  return true;
+}
+
+function resetToneCurve(pushHistory = false): void {
+  toneCurvePoints = [
+    { x: 0, y: 0 },
+    { x: 0.25, y: 0.25 },
+    { x: 0.5, y: 0.5 },
+    { x: 0.75, y: 0.75 },
+    { x: 1, y: 1 },
+  ];
+  if (pushHistory) pushToneCurveHistory();
+  drawToneCurve();
+}
+
+function handleUndoAction(): void {
+  const state = store.getState();
+  if (state.ui.activeLayer === 'toning' && undoToneCurve()) {
+    return;
+  }
+  store.undo();
+}
+
+function handleRedoAction(): void {
+  const state = store.getState();
+  if (state.ui.activeLayer === 'toning' && redoToneCurve()) {
+    return;
+  }
+  store.redo();
+}
 
 function setupToneCurve(): void {
   const canvas = document.getElementById('tone-curve-canvas') as HTMLCanvasElement;
   if (!canvas) return;
+
+  if (toneCurveHistory.length === 0) {
+    pushToneCurveHistory();
+  }
 
   const margin = 20;
 
@@ -1223,6 +1322,7 @@ function setupToneCurve(): void {
       }
       toneCurvePoints.splice(insertIdx, 0, norm);
       tcDragIdx = insertIdx;
+      pushToneCurveHistory();
       drawToneCurve();
     }
   });
@@ -1247,6 +1347,7 @@ function setupToneCurve(): void {
   });
 
   window.addEventListener('mouseup', () => {
+    if (tcDragIdx !== null) pushToneCurveHistory();
     tcDragIdx = null;
   });
 
@@ -1256,6 +1357,7 @@ function setupToneCurve(): void {
     const idx = hitTestPoint(pos.x, pos.y);
     if (idx !== null && idx > 0 && idx < toneCurvePoints.length - 1) {
       toneCurvePoints.splice(idx, 1);
+      pushToneCurveHistory();
       drawToneCurve();
     }
   });
@@ -1275,6 +1377,7 @@ function setupToneCurve(): void {
       }
       toneCurvePoints.splice(insertIdx, 0, norm);
       tcDragIdx = insertIdx;
+      pushToneCurveHistory();
       drawToneCurve();
     }
   }, { passive: false });
@@ -1296,7 +1399,10 @@ function setupToneCurve(): void {
     drawToneCurve();
   });
 
-  window.addEventListener('touchend', () => { tcDragIdx = null; });
+  window.addEventListener('touchend', () => {
+    if (tcDragIdx !== null) pushToneCurveHistory();
+    tcDragIdx = null;
+  });
 }
 
 function drawToneCurve(): void {
@@ -1484,9 +1590,6 @@ function handleDragEnd(): void {
 
 function setupPerformanceMonitor(): void {
   renderer.onFps((fps) => {
-    const fpsEl = document.getElementById('fps-counter');
-    if (fpsEl) fpsEl.textContent = `${fps} FPS`;
-
     // Auto-downgrade resolution if needed
     if (fps < 20) {
       const state = store.getState();
