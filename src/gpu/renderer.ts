@@ -156,12 +156,12 @@ export class Renderer {
 
     // Fullscreen quad vertices
     const positions = new Float32Array([
-      -1, -1,  1, -1,  -1, 1,
-      -1,  1,  1, -1,   1, 1,
+      -1, -1, 1, -1, -1, 1,
+      -1, 1, 1, -1, 1, 1,
     ]);
     const texCoords = new Float32Array([
-      0, 1,  1, 1,  0, 0,
-      0, 0,  1, 1,  1, 0,
+      0, 1, 1, 1, 0, 0,
+      0, 0, 1, 1, 1, 0,
     ]);
 
     if (this.isWebGL2) {
@@ -330,7 +330,7 @@ export class Renderer {
     // Split view
     gl.uniform1i(this.uniforms['u_splitView'], state.ui.splitView ? 1 : 0);
     gl.uniform1f(this.uniforms['u_splitPosition'], Math.max(0, Math.min(1, state.ui.splitPosition)));
-    gl.uniform1i(this.uniforms['u_enableProcessing'], 1);
+    gl.uniform1i(this.uniforms['u_enableProcessing'], state.ui.holdCompareActive ? 0 : 1);
     const useToneCurve = state.ui.toneCurveEnabled && !state.ui.toneCurveBypassPreview;
     gl.uniform1i(this.uniforms['u_useToneCurve'], useToneCurve ? 1 : 0);
 

@@ -98,9 +98,11 @@ export function compressLinearGamutVec3(rgb: [number, number, number]): [number,
     }
   }
 
-  // Keep the mapped color slightly inside the gamut boundary to avoid visible hard rims.
+  // Apply a soft shoulder near gamut boundaries to avoid hard white/black rims.
+  const overshoot = Math.max(maxC - 1, -minC, 0);
+  const softness = clamp(0.14 + overshoot * 0.35, 0.14, 0.4);
   scale = clamp(scale, 0, 1);
-  const softenedScale = scale < 1 ? scale * (0.9 + 0.1 * scale) : 1;
+  const softenedScale = scale - softness * scale * (1 - scale);
 
   return clampVec3([
     neutral + dr * softenedScale,

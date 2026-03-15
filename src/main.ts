@@ -25,11 +25,21 @@ let originalImage: HTMLImageElement | null = null;
 let previewCanvas: HTMLCanvasElement | null = null;
 let renderedWheelCanvas: HTMLCanvasElement | null = null;
 let _wheelAnimFrame = 0;
+let dominantImageHues: number[] = [];
+type ThemeMode = 'dark' | 'light';
+const THEME_STORAGE_KEY = 'colorToy.theme';
+
+function readCssVar(name: string, fallback: string): string {
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
 
 // Histogram throttle
 let lastHistogramTime = 0;
 const HISTOGRAM_INTERVAL = 1000 / 10; // ~10fps max
 const TONE_CURVE_LUT_SIZE = 256;
+const DOMINANT_HUE_BINS = 72;
+const DOMINANT_HUE_COUNT = 6;
 
 type ToneCurvePoint = { x: number; y: number };
 
@@ -73,9 +83,11 @@ function init(): void {
   store.subscribe(onStateChange);
 
   // Setup UI event handlers
+  setupThemeToggle();
   setupLayerTabs();
   setupToolbar();
   setupSplitDivider();
+  setupCompareHint();
   setupPanels();
   setupPresets();
   setupExport();
@@ -90,6 +102,14 @@ function init(): void {
 
   // Initial render
   const state = store.getState();
+  const exportState: AppState = {
+    ...state,
+    ui: {
+      ...state.ui,
+      holdCompareActive: false,
+    },
+  };
+  colorWheel.setImageHuePeaks(dominantImageHues);
   colorWheel.setState(state);
   colorWheel.draw(state);
   if (renderedWheelCanvas) {
@@ -108,6 +128,83 @@ function init(): void {
   // Handle window resize
   window.addEventListener('resize', handleResize);
   handleResize();
+}
+
+function applyTheme(theme: ThemeMode, button?: HTMLButtonElement | null): void {
+  document.documentElement.setAttribute('data-theme', theme);
+
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+  if (themeColorMeta) {
+    themeColorMeta.content = theme === 'light' ? '#eef2f7' : '#12171d';
+  }
+
+  const btn = button ?? document.getElementById('theme-toggle-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+
+  const nextLabel = theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+  btn.title = nextLabel;
+  btn.setAttribute('aria-label', nextLabel);
+  btn.classList.toggle('active', theme === 'light');
+
+  const label = btn.querySelector('.theme-toggle-label') as HTMLElement | null;
+  if (label) {
+    label.textContent = theme === 'light' ? 'Light' : 'Dark';
+  }
+
+  const state = store.getState();
+  colorWheel.draw(state);
+  if (renderedWheelCanvas) {
+    colorWheel.drawRendered(state, renderedWheelCanvas);
+  }
+  drawToneCurve();
+  drawHistogram();
+  if (state.ui.activeLayer === 'calibration') {
+    drawXYDiagram(state);
+  }
+}
+
+function setupThemeToggle(): void {
+  const btn = document.getElementById('theme-toggle-btn') as HTMLButtonElement | null;
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const initialTheme: ThemeMode = stored === 'light' ? 'light' : 'dark';
+  applyTheme(initialTheme, btn);
+
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    const next: ThemeMode = current === 'dark' ? 'light' : 'dark';
+    window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    applyTheme(next, btn);
+  });
+}
+
+function setupCompareHint(): void {
+  const hint = document.getElementById('compare-hint');
+  if (!hint) return;
+
+  const key = 'colorToy.holdCompareHintSeen';
+  const seen = window.localStorage.getItem(key) === '1';
+  if (seen) {
+    const state = store.getState();
+    if (!state.ui.holdCompareHintDismissed) {
+      store.update({
+        ui: { ...state.ui, holdCompareHintDismissed: true },
+      });
+    }
+    return;
+  }
+
+  hint.style.display = 'block';
+  window.setTimeout(() => {
+    hint.style.display = 'none';
+    window.localStorage.setItem(key, '1');
+    const state = store.getState();
+    if (!state.ui.holdCompareHintDismissed) {
+      store.update({
+        ui: { ...state.ui, holdCompareHintDismissed: true },
+      });
+    }
+  }, 4600);
 }
 
 // ============ State Change Handler ============
@@ -145,8 +242,13 @@ function setupLayerTabs(): void {
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       const layer = (tab as HTMLElement).dataset.layer as AppState['ui']['activeLayer'];
+      const prev = store.getState();
       store.update({
-        ui: { ...store.getState().ui, activeLayer: layer },
+        ui: {
+          ...prev.ui,
+          activeLayer: layer,
+          colorPickerActive: layer === 'mapping' ? prev.ui.colorPickerActive : false,
+        },
       });
     });
   });
@@ -230,6 +332,7 @@ function loadImageFile(file: File): void {
       // Create preview canvas (long edge <= resolution limit)
       const maxDim = store.getState().ui.previewResolution;
       previewCanvas = scaleImageToCanvas(img, maxDim);
+      refreshDominantImageHues();
 
       // Size the GL canvas to match image resolution
       const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
@@ -282,19 +385,111 @@ function scaleImageToCanvas(img: HTMLImageElement, maxDim: number): HTMLCanvasEl
   return canvas;
 }
 
+function normalizeHue01(h: number): number {
+  let hue = h % 1;
+  if (hue < 0) hue += 1;
+  return hue;
+}
+
+function extractDominantHuesFromCanvas(
+  canvas: HTMLCanvasElement,
+  topN = DOMINANT_HUE_COUNT,
+  bins = DOMINANT_HUE_BINS,
+): number[] {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return [];
+
+  const { width, height } = canvas;
+  if (width === 0 || height === 0) return [];
+
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const hist = new Float32Array(bins);
+  const totalPixels = width * height;
+  const pixelStep = Math.max(1, Math.floor(Math.sqrt(totalPixels / 16000)));
+
+  for (let y = 0; y < height; y += pixelStep) {
+    for (let x = 0; x < width; x += pixelStep) {
+      const idx = (y * width + x) * 4;
+      const r = data[idx] / 255;
+      const g = data[idx + 1] / 255;
+      const b = data[idx + 2] / 255;
+      const [h, s, v] = rgbToHsv(r, g, b);
+      if (v < 0.04) continue;
+
+      const bin = Math.floor(normalizeHue01(h) * bins) % bins;
+      const chromaWeight = Math.max(0.16, s * s);
+      const weight = chromaWeight * (0.35 + 0.65 * v);
+      hist[bin] += weight;
+    }
+  }
+
+  const smooth = new Float32Array(bins);
+  for (let i = 0; i < bins; i++) {
+    const prev = hist[(i - 1 + bins) % bins];
+    const cur = hist[i];
+    const next = hist[(i + 1) % bins];
+    smooth[i] = prev * 0.25 + cur * 0.5 + next * 0.25;
+  }
+
+  const indices = Array.from({ length: bins }, (_, i) => i).sort((a, b) => smooth[b] - smooth[a]);
+  const selected: number[] = [];
+  const minGap = Math.max(2, Math.floor(bins / 14));
+
+  for (const idx of indices) {
+    if (smooth[idx] <= 0) break;
+    const tooClose = selected.some((sIdx) => {
+      const d = Math.abs(idx - sIdx);
+      return Math.min(d, bins - d) < minGap;
+    });
+    if (tooClose) continue;
+    selected.push(idx);
+    if (selected.length >= topN) break;
+  }
+
+  if (selected.length === 0) {
+    // Fallback: keep at least a few hue anchors for low-saturation images.
+    selected.push(...indices.slice(0, Math.min(3, bins)));
+  }
+
+  return selected.sort((a, b) => a - b).map((idx) => (idx + 0.5) / bins);
+}
+
+function refreshDominantImageHues(): void {
+  dominantImageHues = previewCanvas ? extractDominantHuesFromCanvas(previewCanvas) : [];
+  if (colorWheel) {
+    colorWheel.setImageHuePeaks(dominantImageHues);
+  }
+}
+
 // ============ Toolbar ============
 
 function setupToolbar(): void {
-  // Color picker button
-  const pickerBtn = document.getElementById('picker-btn');
-  if (pickerBtn) {
-    pickerBtn.addEventListener('click', () => {
-      const state = store.getState();
-      store.update({
-        ui: { ...state.ui, colorPickerActive: !state.ui.colorPickerActive },
-      });
-      pickerBtn.classList.toggle('active', !state.ui.colorPickerActive);
+  const holdCompareBtn = document.getElementById('hold-compare-btn') as HTMLButtonElement | null;
+  const setHoldCompare = (active: boolean) => {
+    const state = store.getState();
+    if (!state.imageLoaded) active = false;
+    if (state.ui.holdCompareActive === active) return;
+    store.update({
+      ui: { ...state.ui, holdCompareActive: active },
     });
+  };
+
+  if (holdCompareBtn) {
+    holdCompareBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      setHoldCompare(true);
+    });
+    holdCompareBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      setHoldCompare(true);
+    }, { passive: false });
+
+    const release = () => setHoldCompare(false);
+    holdCompareBtn.addEventListener('mouseup', release);
+    holdCompareBtn.addEventListener('mouseleave', release);
+    holdCompareBtn.addEventListener('touchend', release);
+    window.addEventListener('mouseup', release);
+    window.addEventListener('touchend', release);
   }
 
   // Reset All button
@@ -313,6 +508,7 @@ function setupToolbar(): void {
           splitPosition: 0.5,
           toneCurveEnabled: true,
           toneCurveBypassPreview: false,
+          holdCompareActive: false,
         },
       }, true);
       resetToneCurve(true);
@@ -371,7 +567,7 @@ function setupToolbar(): void {
   if (glCanvas) {
     glCanvas.addEventListener('click', (e) => {
       const state = store.getState();
-      if (!state.ui.colorPickerActive || !state.imageLoaded) return;
+      if (!state.ui.colorPickerActive || !state.imageLoaded || state.ui.activeLayer !== 'mapping') return;
 
       const rect = glCanvas.getBoundingClientRect();
       const nx = (e.clientX - rect.left) / rect.width;
@@ -472,14 +668,20 @@ function setupWheelCompareToggle(): void {
   const row = document.getElementById('wheels-row');
   if (!btn || !row) return;
 
-  const labels = ['Compare: Left/Right', 'Compare: Right/Left', 'Compare: Inside/Outside'];
+  const labels = ['Compare: Left/Right', 'Compare: Inside/Outside'];
   let mode = 0;
 
   const applyMode = () => {
     row.classList.remove('wheels-compare-swap', 'wheels-compare-inside');
-    if (mode === 1) row.classList.add('wheels-compare-swap');
-    if (mode === 2) row.classList.add('wheels-compare-inside');
+    if (mode === 1) row.classList.add('wheels-compare-inside');
     btn.textContent = labels[mode];
+
+    // Force immediate redraw so marker visibility/positions reflect mode switch.
+    const state = store.getState();
+    colorWheel.draw(state);
+    if (renderedWheelCanvas) {
+      colorWheel.drawRendered(state, renderedWheelCanvas);
+    }
   };
 
   applyMode();
@@ -675,12 +877,12 @@ function setupXYInputs(): void {
 
 function setupToningSliders(): void {
   const sliders = [
-    { id: 'exposure-slider', key: 'exposure', min: -2, max: 2 },
-    { id: 'contrast-slider', key: 'contrast', min: 0.5, max: 2.0 },
-    { id: 'highlights-slider', key: 'highlights', min: -1, max: 1 },
-    { id: 'shadows-slider', key: 'shadows', min: -1, max: 1 },
-    { id: 'whites-slider', key: 'whites', min: -1, max: 1 },
-    { id: 'blacks-slider', key: 'blacks', min: -1, max: 1 },
+    { id: 'exposure-slider', key: 'exposure', min: -1, max: 1, step: 0.01 },
+    { id: 'contrast-slider', key: 'contrast', min: 0, max: 2.0, step: 0.005 },
+    { id: 'highlights-slider', key: 'highlights', min: -0.5, max: 0.5, step: 0.005 },
+    { id: 'shadows-slider', key: 'shadows', min: -0.5, max: 0.5, step: 0.005 },
+    { id: 'whites-slider', key: 'whites', min: -0.5, max: 0.5, step: 0.005 },
+    { id: 'blacks-slider', key: 'blacks', min: -0.5, max: 0.5, step: 0.005 },
   ];
 
   for (const s of sliders) {
@@ -689,7 +891,13 @@ function setupToningSliders(): void {
 
     el.min = String(s.min);
     el.max = String(s.max);
-    el.step = '0.01';
+    el.step = String(s.step);
+    const valEl = document.getElementById(s.id + '-val') as HTMLInputElement | null;
+    if (valEl) {
+      valEl.min = String(s.min);
+      valEl.max = String(s.max);
+      valEl.step = String(s.step);
+    }
 
     el.addEventListener('input', () => {
       const state = store.getState();
@@ -765,6 +973,20 @@ function setupMappingControls(): void {
   const addBtn = document.getElementById('add-mapping-btn');
   if (addBtn) {
     addBtn.addEventListener('click', () => handleMappingAdd(0));
+  }
+
+  const pickerBtn = document.getElementById('add-mapping-picker-btn');
+  if (pickerBtn) {
+    pickerBtn.addEventListener('click', () => {
+      const state = store.getState();
+      store.update({
+        ui: {
+          ...state.ui,
+          activeLayer: 'mapping',
+          colorPickerActive: !state.ui.colorPickerActive,
+        },
+      });
+    });
   }
 
   const deleteBtn = document.getElementById('delete-mapping-btn');
@@ -920,7 +1142,7 @@ function exportImage(): void {
     const exportRenderer = new Renderer(offCanvas);
     exportRenderer.loadImage(originalImage);
     exportRenderer.setToneCurveLut(buildToneCurveLut());
-    exportRenderer.updateUniforms(state);
+    exportRenderer.updateUniforms(exportState);
     exportRenderer.render();
 
     // Download
@@ -1227,12 +1449,19 @@ function drawXYDiagram(state: AppState): void {
 
   ctx.clearRect(0, 0, cssW, cssH);
 
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const bg = readCssVar('--bg-primary', '#101318');
+  const grid = isLight ? 'rgba(14,32,52,0.12)' : 'rgba(255,255,255,0.09)';
+  const labels = isLight ? 'rgba(28,48,75,0.45)' : 'rgba(255,255,255,0.35)';
+  const textStrong = isLight ? '#12243a' : '#f0f4fb';
+  const accentStroke = isLight ? 'rgba(35,124,232,0.8)' : 'rgba(60,137,255,0.85)';
+
   // Background
-  ctx.fillStyle = '#08080e';
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, cssW, cssH);
 
   // Grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.strokeStyle = grid;
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= 10; i++) {
     const v = i / 10;
@@ -1243,7 +1472,7 @@ function drawXYDiagram(state: AppState): void {
   }
 
   // Axis labels
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillStyle = labels;
   ctx.font = '8px system-ui';
   ctx.textAlign = 'center';
   for (let i = 0; i <= 5; i++) {
@@ -1276,9 +1505,9 @@ function drawXYDiagram(state: AppState): void {
     if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   }
   ctx.closePath();
-  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+  ctx.fillStyle = isLight ? 'rgba(20,36,58,0.05)' : 'rgba(255,255,255,0.03)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.strokeStyle = isLight ? 'rgba(20,36,58,0.25)' : 'rgba(255,255,255,0.2)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -1292,7 +1521,7 @@ function drawXYDiagram(state: AppState): void {
   }
   ctx.closePath();
   ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.strokeStyle = isLight ? 'rgba(20,36,58,0.2)' : 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.setLineDash([]);
@@ -1307,7 +1536,7 @@ function drawXYDiagram(state: AppState): void {
     if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   }
   ctx.closePath();
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.strokeStyle = accentStroke;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
@@ -1316,9 +1545,9 @@ function drawXYDiagram(state: AppState): void {
   const wpy = margin + (1 - D65_WHITE_XY[1]) * plotH;
   ctx.beginPath();
   ctx.arc(wpx, wpy, 3, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = textStrong;
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.strokeStyle = isLight ? 'rgba(20,36,58,0.45)' : 'rgba(255,255,255,0.55)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -1335,11 +1564,11 @@ function drawXYDiagram(state: AppState): void {
     ctx.arc(px, py, 8, 0, Math.PI * 2);
     ctx.fillStyle = p.color;
     ctx.fill();
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = textStrong;
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = textStrong;
     ctx.font = 'bold 8px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1605,12 +1834,18 @@ function drawToneCurve(): void {
   const plotW = cssW - margin * 2;
   const plotH = cssH - margin * 2;
 
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const bg = readCssVar('--bg-primary', '#101318');
+  const border = isLight ? 'rgba(14,32,52,0.12)' : 'rgba(255,255,255,0.09)';
+  const textStrong = isLight ? '#12243a' : '#f0f4fb';
+  const accentCurve = isLight ? 'rgba(36,126,236,0.9)' : 'rgba(64,148,255,0.92)';
+
   ctx.clearRect(0, 0, cssW, cssH);
-  ctx.fillStyle = '#08080e';
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, cssW, cssH);
 
   // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.strokeStyle = border;
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
     const v = i / 4;
@@ -1624,7 +1859,7 @@ function drawToneCurve(): void {
   ctx.beginPath();
   ctx.moveTo(margin, margin + plotH);
   ctx.lineTo(margin + plotW, margin);
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.strokeStyle = isLight ? 'rgba(18,38,60,0.26)' : 'rgba(255,255,255,0.22)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -1641,7 +1876,7 @@ function drawToneCurve(): void {
     const py = margin + (1 - y) * plotH;
     if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   }
-  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.strokeStyle = accentCurve;
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -1651,9 +1886,9 @@ function drawToneCurve(): void {
     const py = margin + (1 - pts[i].y) * plotH;
     ctx.beginPath();
     ctx.arc(px, py, 5, 0, Math.PI * 2);
-    ctx.fillStyle = i === tcDragIdx ? '#fff' : 'rgba(255,255,255,0.7)';
+    ctx.fillStyle = i === tcDragIdx ? textStrong : (isLight ? 'rgba(18,36,58,0.7)' : 'rgba(255,255,255,0.75)');
     ctx.fill();
-    ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
+    ctx.strokeStyle = isLight ? 'rgba(36,126,236,0.72)' : 'rgba(64,148,255,0.72)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
@@ -1784,6 +2019,7 @@ function setupPerformanceMonitor(): void {
           ui: { ...state.ui, previewResolution: newRes as 1080 | 720 | 512 },
         });
         previewCanvas = scaleImageToCanvas(originalImage, newRes);
+        refreshDominantImageHues();
         renderer.loadImage(previewCanvas);
       }
     }
@@ -1855,8 +2091,10 @@ function drawHistogram(): void {
   // Draw
   const cw = histCanvas.width;
   const ch = histCanvas.height;
+  const bg = readCssVar('--bg-primary', '#101318');
+  const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   ctx.clearRect(0, 0, cw, ch);
-  ctx.fillStyle = '#08080e';
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, cw, ch);
 
   const barW = cw / 256;
@@ -1872,9 +2110,15 @@ function drawHistogram(): void {
   };
 
   ctx.globalCompositeOperation = 'lighter';
-  drawChannel(rHist, 'rgb(200,50,50)');
-  drawChannel(gHist, 'rgb(50,200,50)');
-  drawChannel(bHist, 'rgb(50,50,200)');
+  if (theme === 'light') {
+    drawChannel(rHist, 'rgb(225,95,95)');
+    drawChannel(gHist, 'rgb(78,170,102)');
+    drawChannel(bHist, 'rgb(58,129,226)');
+  } else {
+    drawChannel(rHist, 'rgb(214,77,77)');
+    drawChannel(gHist, 'rgb(68,178,108)');
+    drawChannel(bHist, 'rgb(52,121,233)');
+  }
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1.0;
 }
@@ -1897,6 +2141,18 @@ function updatePanelUI(state: AppState): void {
 
   const splitBtn = document.getElementById('split-btn');
   if (splitBtn) splitBtn.classList.toggle('active', state.ui.splitView);
+
+  const holdCompareBtn = document.getElementById('hold-compare-btn') as HTMLButtonElement | null;
+  if (holdCompareBtn) {
+    holdCompareBtn.classList.toggle('active', state.ui.holdCompareActive);
+    holdCompareBtn.disabled = !state.imageLoaded;
+  }
+
+  const mappingPickerBtn = document.getElementById('add-mapping-picker-btn') as HTMLButtonElement | null;
+  if (mappingPickerBtn) {
+    mappingPickerBtn.classList.toggle('active', state.ui.colorPickerActive && state.ui.activeLayer === 'mapping');
+    mappingPickerBtn.disabled = !state.imageLoaded;
+  }
 
   // Update calibration slider values
   updateSlider('red-hue-slider', state.calibration.red.hueShift);
@@ -2045,6 +2301,7 @@ function handleResize(): void {
       renderer.render();
     }
   }
+  refreshDominantImageHues();
 
   updateSplitDividerUI(state);
 }

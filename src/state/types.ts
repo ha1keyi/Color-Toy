@@ -50,6 +50,8 @@ export interface UIState {
   showXYPanel: boolean;
   toneCurveEnabled: boolean;
   toneCurveBypassPreview: boolean;
+  holdCompareActive: boolean;
+  holdCompareHintDismissed: boolean;
 }
 
 export interface AppState {
@@ -153,6 +155,8 @@ export function createInitialState(): AppState {
       showXYPanel: false,
       toneCurveEnabled: true,
       toneCurveBypassPreview: false,
+      holdCompareActive: false,
+      holdCompareHintDismissed: false,
     },
     imageLoaded: false,
   };

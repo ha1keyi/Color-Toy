@@ -17,7 +17,6 @@ import {
 } from '../../core/color/conversions';
 import {
   AppState,
-  D65_WHITE_XY,
   SRGB_RED_XY,
   SRGB_GREEN_XY,
   SRGB_BLUE_XY,
@@ -72,18 +71,6 @@ function xyToHue(x: number, y: number): number {
   else h = ((r - g) / d + 4) / 6;
 
   return h;
-}
-
-/**
- * Compute the normalized distance from the D65 white point in xy space.
- * Used for the radial position of primary markers on the wheel.
- */
-function xyToNormalizedRadius(x: number, y: number): number {
-  const wx = D65_WHITE_XY[0];
-  const wy = D65_WHITE_XY[1];
-  const dist = Math.sqrt((x - wx) ** 2 + (y - wy) ** 2);
-  // 0.4 is roughly the maximum gamut distance from the white point in xy
-  return Math.min(dist / 0.4, 1);
 }
 
 /**
@@ -148,6 +135,12 @@ export class ColorWheel {
   private onGlobalHueChange: ((shift: number) => void) | null = null;
   private onMappingSelect: ((id: string | null) => void) | null = null;
   private onDragEnd: (() => void) | null = null;
+  private imageHuePeaks: number[] = [];
+
+  private isInsideOutsideMode(): boolean {
+    const row = document.getElementById('wheels-row');
+    return !!row?.classList.contains('wheels-compare-inside');
+  }
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -172,6 +165,10 @@ export class ColorWheel {
     this.onGlobalHueChange = cbs.onGlobalHueChange ?? null;
     this.onMappingSelect = cbs.onMappingSelect ?? null;
     this.onDragEnd = cbs.onDragEnd ?? null;
+  }
+
+  setImageHuePeaks(peaks: number[]): void {
+    this.imageHuePeaks = peaks.map((h) => wrapHue01(h));
   }
 
   resize(): void {
@@ -200,20 +197,30 @@ export class ColorWheel {
 
     ctx.clearRect(0, 0, this.size, this.size);
 
+    const insideOutside = this.isInsideOutsideMode();
+
     switch (state.ui.activeLayer) {
       case 'calibration': {
         this.drawHueRing(ctx, this.center, this.radius, this.innerRadius);
-        this.drawCalibrationMarkers(ctx, state);
+        if (!insideOutside) {
+          this.drawCalibrationMarkers(ctx, state);
+        }
         break;
       }
       case 'mapping':
         this.drawHueRing(ctx, this.center, this.radius, this.innerRadius);
         this.drawGlobalHueCenter(ctx, state);
-        this.drawMappingPoints(ctx, state);
+        if (!insideOutside) {
+          this.drawMappingPoints(ctx, state);
+        }
         break;
       case 'toning':
         // Toning mode: clear canvas and return early, no wheel drawn
         return;
+    }
+
+    if (!insideOutside) {
+      this.drawImageHueMarkers(ctx, state, this.center, this.radius, this.innerRadius);
     }
 
     // White point indicator at center
@@ -242,8 +249,9 @@ export class ColorWheel {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Use the same size as the edit wheel for consistent appearance
-    const cssSize = this.size || 160;
+    const rect = canvas.parentElement?.getBoundingClientRect();
+    const measured = rect ? Math.min(rect.width, rect.height, 360) : 0;
+    const cssSize = measured > 0 ? measured : (this.size || 160);
     if (!cssSize) return;
 
     const dpr = window.devicePixelRatio || 1;
@@ -296,6 +304,8 @@ export class ColorWheel {
         this.drawRenderedMappingPoints(ctx, state, center, radius, innerRadius);
         break;
     }
+
+    this.drawRenderedImageHueMarkers(ctx, state, center, radius, innerRadius);
 
     // White point indicator
     ctx.beginPath();
@@ -387,13 +397,18 @@ export class ColorWheel {
     for (const m of markers) {
       // Fixed standard sRGB position
       const fixedHue = xyToHue(m.fixedXY[0], m.fixedXY[1]);
-      const fixedNR = xyToNormalizedRadius(m.fixedXY[0], m.fixedXY[1]);
-      const fixedPos = this.polarToCanvas(hueToCanvasAngle(fixedHue), fixedNR);
+      const markerRadius = (this.radius + this.innerRadius) * 0.5;
+      const fixedPos = {
+        x: this.center + Math.cos(hueToCanvasAngle(fixedHue)) * markerRadius,
+        y: this.center + Math.sin(hueToCanvasAngle(fixedHue)) * markerRadius,
+      };
 
       // Shifted (calibrated) position
       const shiftedHue = xyToHue(m.shiftedXY[0], m.shiftedXY[1]);
-      const shiftedNR = xyToNormalizedRadius(m.shiftedXY[0], m.shiftedXY[1]);
-      const shiftedPos = this.polarToCanvas(hueToCanvasAngle(shiftedHue), shiftedNR);
+      const shiftedPos = {
+        x: this.center + Math.cos(hueToCanvasAngle(shiftedHue)) * markerRadius,
+        y: this.center + Math.sin(hueToCanvasAngle(shiftedHue)) * markerRadius,
+      };
 
       // Dashed line from fixed to shifted position (if they differ)
       const dx = shiftedPos.x - fixedPos.x;
@@ -409,31 +424,30 @@ export class ColorWheel {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Small filled dot at the shifted (destination) position
-        ctx.beginPath();
-        ctx.arc(shiftedPos.x, shiftedPos.y, 5, 0, TWO_PI);
-        ctx.fillStyle = m.color;
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        this.drawRingTick(
+          ctx,
+          this.center,
+          hueToCanvasAngle(shiftedHue),
+          this.radius,
+          10,
+          3,
+          m.color,
+          null,
+          true,
+        );
       }
 
-      // Fixed marker circle (always at standard sRGB position)
-      ctx.beginPath();
-      ctx.arc(fixedPos.x, fixedPos.y, 14, 0, TWO_PI);
-      ctx.fillStyle = m.color;
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-
-      // Label
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(m.label, fixedPos.x, fixedPos.y);
+      this.drawRingTick(
+        ctx,
+        this.center,
+        hueToCanvasAngle(fixedHue),
+        this.radius,
+        12,
+        4,
+        m.color,
+        m.label,
+        false,
+      );
     }
   }
 
@@ -443,40 +457,111 @@ export class ColorWheel {
    */
   private drawRenderedPrimaryMarkers(
     ctx: CanvasRenderingContext2D,
-    state: AppState,
+    _state: AppState,
     center: number,
     radius: number,
     innerRadius: number,
   ): void {
-    const calibratedPrimaries = state.primaries;
-
     const colors = [
-      { xy: calibratedPrimaries.red, color: '#ff3333', label: 'R' },
-      { xy: calibratedPrimaries.green, color: '#33cc33', label: 'G' },
-      { xy: calibratedPrimaries.blue, color: '#3366ff', label: 'B' },
+      { xy: SRGB_RED_XY, color: '#ff3333', label: 'R' },
+      { xy: SRGB_GREEN_XY, color: '#33cc33', label: 'G' },
+      { xy: SRGB_BLUE_XY, color: '#3366ff', label: 'B' },
     ];
 
     for (const c of colors) {
       const hue = xyToHue(c.xy[0], c.xy[1]);
-      const nRadius = xyToNormalizedRadius(c.xy[0], c.xy[1]);
       const canvasAngle = hueToCanvasAngle(hue);
-      const r = innerRadius + nRadius * (radius - innerRadius);
-      const px = center + Math.cos(canvasAngle) * r;
-      const py = center + Math.sin(canvasAngle) * r;
+      this.drawRingTick(ctx, center, canvasAngle, radius, 12, 4, c.color, c.label, false);
+    }
+  }
+
+  private drawRingTick(
+    ctx: CanvasRenderingContext2D,
+    center: number,
+    angle: number,
+    outerRadius: number,
+    tickLen: number,
+    tickWidth: number,
+    color: string,
+    label: string | null,
+    subtle: boolean,
+  ): void {
+    const outerX = center + Math.cos(angle) * (outerRadius + (subtle ? 0 : 1));
+    const outerY = center + Math.sin(angle) * (outerRadius + (subtle ? 0 : 1));
+    const innerX = center + Math.cos(angle) * (outerRadius - tickLen);
+    const innerY = center + Math.sin(angle) * (outerRadius - tickLen);
+
+    ctx.beginPath();
+    ctx.moveTo(innerX, innerY);
+    ctx.lineTo(outerX, outerY);
+    ctx.strokeStyle = subtle ? 'rgba(255,255,255,0.9)' : color;
+    ctx.lineWidth = tickWidth;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    if (!label) return;
+
+    const labelR = outerRadius + 11;
+    const lx = center + Math.cos(angle) * labelR;
+    const ly = center + Math.sin(angle) * labelR;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, lx, ly);
+  }
+
+  private drawImageHueMarkers(
+    ctx: CanvasRenderingContext2D,
+    _state: AppState,
+    center: number,
+    radius: number,
+    innerRadius: number,
+  ): void {
+    if (this.imageHuePeaks.length === 0) return;
+
+    const markerR = innerRadius + (radius - innerRadius) * 0.72;
+    for (const hue of this.imageHuePeaks) {
+      const angle = hueToCanvasAngle(hue);
+      const px = center + Math.cos(angle) * markerR;
+      const py = center + Math.sin(angle) * markerR;
 
       ctx.beginPath();
-      ctx.arc(px, py, 14, 0, TWO_PI);
-      ctx.fillStyle = c.color;
+      ctx.arc(px, py, 4.5, 0, TWO_PI);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(px, py, 7.5, 0, TWO_PI);
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
+    }
+  }
 
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(c.label, px, py);
+  private drawRenderedImageHueMarkers(
+    ctx: CanvasRenderingContext2D,
+    _state: AppState,
+    center: number,
+    radius: number,
+    innerRadius: number,
+  ): void {
+    if (this.imageHuePeaks.length === 0) return;
+
+    const markerR = innerRadius + (radius - innerRadius) * 0.72;
+    for (const sourceHue of this.imageHuePeaks) {
+      const angle = hueToCanvasAngle(sourceHue);
+      const px = center + Math.cos(angle) * markerR;
+      const py = center + Math.sin(angle) * markerR;
+
+      ctx.beginPath();
+      ctx.arc(px, py, 4.5, 0, TWO_PI);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px, py, 7.5, 0, TWO_PI);
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
   }
 

@@ -76,8 +76,10 @@ vec3 compress_to_unit_gamut(vec3 rgb) {
     }
   }
 
+  float overshoot = max(maxC - 1.0, max(-minC, 0.0));
+  float softness = clamp(0.14 + overshoot * 0.35, 0.14, 0.4);
   scale = clamp(scale, 0.0, 1.0);
-  float softenedScale = scale < 1.0 ? scale * (0.9 + 0.1 * scale) : 1.0;
+  float softenedScale = scale - softness * scale * (1.0 - scale);
   return clamp(vec3(neutral) + diff * softenedScale, 0.0, 1.0);
 }
 
@@ -137,13 +139,13 @@ vec3 applyToning(vec3 rgb) {
   // Highlights/shadows (luminance-based)
   float lum = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
 
-  // Highlights affect bright areas
-  float highMask = smoothstep(0.5, 1.0, lum);
-  rgb += u_highlights * highMask * 0.5;
+  // Highlights start earlier and respond a bit stronger.
+  float highMask = smoothstep(0.35, 0.95, lum);
+  rgb += u_highlights * highMask * 0.65;
 
-  // Shadows affect dark areas
-  float shadowMask = 1.0 - smoothstep(0.0, 0.5, lum);
-  rgb += u_shadows * shadowMask * 0.5;
+  // Shadows are restricted to deeper darks to avoid affecting most of the image.
+  float shadowMask = 1.0 - smoothstep(0.0, 0.35, lum);
+  rgb += u_shadows * shadowMask * 0.4;
 
   // Whites (top end)
   float whiteMask = smoothstep(0.75, 1.0, lum);
@@ -276,8 +278,10 @@ vec3 compress_to_unit_gamut(vec3 rgb) {
       scale = min(scale, neutral / -delta);
     }
   }
+  float overshoot = max(maxC - 1.0, max(-minC, 0.0));
+  float softness = clamp(0.14 + overshoot * 0.35, 0.14, 0.4);
   scale = clamp(scale, 0.0, 1.0);
-  float softenedScale = scale < 1.0 ? scale * (0.9 + 0.1 * scale) : 1.0;
+  float softenedScale = scale - softness * scale * (1.0 - scale);
   return clamp(vec3(neutral) + diff * softenedScale, 0.0, 1.0);
 }
 
@@ -323,10 +327,10 @@ vec3 applyToning(vec3 rgb) {
   rgb *= pow(2.0, u_exposure);
   rgb = (rgb - 0.5) * u_contrast + 0.5;
   float lum = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-  float highMask = smoothstep(0.5, 1.0, lum);
-  rgb += u_highlights * highMask * 0.5;
-  float shadowMask = 1.0 - smoothstep(0.0, 0.5, lum);
-  rgb += u_shadows * shadowMask * 0.5;
+  float highMask = smoothstep(0.35, 0.95, lum);
+  rgb += u_highlights * highMask * 0.65;
+  float shadowMask = 1.0 - smoothstep(0.0, 0.35, lum);
+  rgb += u_shadows * shadowMask * 0.4;
   float whiteMask = smoothstep(0.75, 1.0, lum);
   rgb += u_whites * whiteMask * 0.3;
   float blackMask = 1.0 - smoothstep(0.0, 0.25, lum);

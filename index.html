@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,32 +9,54 @@
   <script type="module" src="/src/main.ts"></script>
   <link rel="stylesheet" href="/src/styles.css">
 </head>
+
 <body>
   <div id="app">
     <!-- Header -->
     <header id="header">
       <div class="header-left">
         <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 10h10a5 5 0 0 1 0 10H8"/><path d="M3 10l5-5M3 10l5 5"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M3 10h10a5 5 0 0 1 0 10H8" />
+            <path d="M3 10l5-5M3 10l5 5" />
+          </svg>
         </button>
         <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Shift+Z)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10H11a5 5 0 0 0 0 10h5"/><path d="M21 10l-5-5M21 10l-5 5"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 10H11a5 5 0 0 0 0 10h5" />
+            <path d="M21 10l-5-5M21 10l-5 5" />
+          </svg>
         </button>
       </div>
       <h1 class="header-title">Color Toy</h1>
       <div class="header-right">
+        <button id="theme-toggle-btn" class="icon-btn theme-btn" title="Switch to light theme"
+          aria-label="Switch to light theme">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+          <span class="theme-toggle-label">Dark</span>
+        </button>
         <button id="export-btn" class="primary-btn">Export</button>
       </div>
     </header>
 
     <!-- Error message -->
     <div id="error-msg" style="display:none"></div>
+    <div id="compare-hint" class="compare-hint" style="display:none">
+      Tip: Hold "Hold Compare" to temporarily view original image. Split Compare remains for fixed divider comparison.
+    </div>
 
     <!-- Preview Area -->
     <div id="preview-container">
       <div id="drop-zone">
         <div class="drop-content">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+            opacity="0.4">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
           <p>Drop image here or</p>
           <button id="load-image-btn" class="primary-btn">Choose Image</button>
           <p class="hint">JPG, PNG, WebP</p>
@@ -50,16 +73,21 @@
     <div id="controls">
       <!-- Toolbar -->
       <div id="toolbar">
-        <button id="picker-btn" class="tool-btn" title="Color Picker">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
-          <span>Picker</span>
+        <button id="hold-compare-btn" class="tool-btn" title="Hold to compare with original image">
+          <span>Hold Compare</span>
         </button>
         <button id="split-btn" class="tool-btn" title="Before/After Compare">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="12" y1="3" x2="12" y2="21" />
+          </svg>
           <span>Compare</span>
         </button>
         <button id="reset-all-btn" class="tool-btn" title="Reset All">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 4v6h6" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
           <span>Reset All</span>
         </button>
       </div>
@@ -104,7 +132,10 @@
           <div class="panel-header">
             <h3 class="panel-title">Calibration</h3>
             <button class="reset-module-btn" data-module="calibration" title="Reset Calibration">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 4v6h6" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
             </button>
           </div>
           <!-- Red Primary -->
@@ -163,7 +194,10 @@
 
           <!-- Collapsible xy Chromaticity Panel -->
           <div id="xy-panel-toggle" class="collapsible-toggle">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" id="xy-toggle-arrow"><path d="M9 18l6-6-6-6"/></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+              id="xy-toggle-arrow">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
             <span>xy Chromaticity (Advanced)</span>
           </div>
           <div id="xy-panel" class="collapsible-content" style="display:none">
@@ -171,33 +205,39 @@
               <span class="primary-label red">R</span>
               <div class="xy-input-group">
                 <label>x</label>
-                <input type="number" id="red-x-input" step="0.001" min="0.01" max="0.99" value="0.6400" class="xy-input">
+                <input type="number" id="red-x-input" step="0.001" min="0.01" max="0.99" value="0.6400"
+                  class="xy-input">
               </div>
               <div class="xy-input-group">
                 <label>y</label>
-                <input type="number" id="red-y-input" step="0.001" min="0.01" max="0.99" value="0.3300" class="xy-input">
+                <input type="number" id="red-y-input" step="0.001" min="0.01" max="0.99" value="0.3300"
+                  class="xy-input">
               </div>
             </div>
             <div class="xy-row">
               <span class="primary-label green">G</span>
               <div class="xy-input-group">
                 <label>x</label>
-                <input type="number" id="green-x-input" step="0.001" min="0.01" max="0.99" value="0.3000" class="xy-input">
+                <input type="number" id="green-x-input" step="0.001" min="0.01" max="0.99" value="0.3000"
+                  class="xy-input">
               </div>
               <div class="xy-input-group">
                 <label>y</label>
-                <input type="number" id="green-y-input" step="0.001" min="0.01" max="0.99" value="0.6000" class="xy-input">
+                <input type="number" id="green-y-input" step="0.001" min="0.01" max="0.99" value="0.6000"
+                  class="xy-input">
               </div>
             </div>
             <div class="xy-row">
               <span class="primary-label blue">B</span>
               <div class="xy-input-group">
                 <label>x</label>
-                <input type="number" id="blue-x-input" step="0.001" min="0.01" max="0.99" value="0.1500" class="xy-input">
+                <input type="number" id="blue-x-input" step="0.001" min="0.01" max="0.99" value="0.1500"
+                  class="xy-input">
               </div>
               <div class="xy-input-group">
                 <label>y</label>
-                <input type="number" id="blue-y-input" step="0.001" min="0.01" max="0.99" value="0.0600" class="xy-input">
+                <input type="number" id="blue-y-input" step="0.001" min="0.01" max="0.99" value="0.0600"
+                  class="xy-input">
               </div>
             </div>
           </div>
@@ -208,7 +248,10 @@
           <div class="panel-header">
             <h3 class="panel-title">Hue Mapping</h3>
             <button class="reset-module-btn" data-module="mapping" title="Reset Hue Mapping">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 4v6h6" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
             </button>
           </div>
           <div class="slider-row">
@@ -219,6 +262,8 @@
           <div id="mapping-list" class="mapping-list"></div>
           <div class="mapping-actions">
             <button id="add-mapping-btn" class="small-btn">+ Add Point</button>
+            <button id="add-mapping-picker-btn" class="small-btn" title="Pick color from image to add point">Pick from
+              Image</button>
             <button id="delete-mapping-btn" class="small-btn danger">Delete</button>
           </div>
           <div id="mapping-detail" style="display:none">
@@ -251,7 +296,10 @@
           <div class="panel-header">
             <h3 class="panel-title">Toning</h3>
             <button class="reset-module-btn" data-module="toning" title="Reset Toning">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 4v6h6" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
             </button>
           </div>
           <!-- Histogram -->
@@ -313,4 +361,5 @@
     </div>
   </div>
 </body>
+
 </html>
