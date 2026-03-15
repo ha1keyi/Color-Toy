@@ -54,6 +54,33 @@ vec3 linear_to_srgb_v(vec3 c) {
   return vec3(linear_to_srgb(c.r), linear_to_srgb(c.g), linear_to_srgb(c.b));
 }
 
+vec3 compress_to_unit_gamut(vec3 rgb) {
+  float maxC = max(rgb.r, max(rgb.g, rgb.b));
+  float minC = min(rgb.r, min(rgb.g, rgb.b));
+  if (maxC <= 1.0 && minC >= 0.0) {
+    return rgb;
+  }
+
+  float neutral = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+  vec3 diff = rgb - vec3(neutral);
+  float scale = 1.0;
+
+  for (int ch = 0; ch < 3; ch++) {
+    float channel = ch == 0 ? rgb.r : (ch == 1 ? rgb.g : rgb.b);
+    float delta = ch == 0 ? diff.r : (ch == 1 ? diff.g : diff.b);
+    if (channel > 1.0 && delta > 0.000001) {
+      scale = min(scale, (1.0 - neutral) / delta);
+    }
+    if (channel < 0.0 && delta < -0.000001) {
+      scale = min(scale, neutral / -delta);
+    }
+  }
+
+  scale = clamp(scale, 0.0, 1.0);
+  float softenedScale = scale < 1.0 ? scale * (0.9 + 0.1 * scale) : 1.0;
+  return clamp(vec3(neutral) + diff * softenedScale, 0.0, 1.0);
+}
+
 // RGB <-> HSV
 vec3 rgb2hsv(vec3 c) {
   vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
@@ -157,34 +184,7 @@ void main() {
   // Step 2: Primary calibration (linear RGB -> calibrated linear RGB via XYZ)
   // Uses smooth gamut mapping instead of hard clamp to avoid white/black edges.
   // Preserves hue by desaturating toward the neutral axis when out-of-gamut.
-  vec3 calibratedRGB = u_primaryMatrix * linearRGB;
-  {
-    float maxC = max(calibratedRGB.r, max(calibratedRGB.g, calibratedRGB.b));
-    float minC = min(calibratedRGB.r, min(calibratedRGB.g, calibratedRGB.b));
-    // Compute luminance (neutral axis value) from original calibrated result
-    float lum = dot(calibratedRGB, vec3(0.2126, 0.7152, 0.0722));
-    lum = clamp(lum, 0.0, 1.0);
-    // If any channel exceeds [0, 1], desaturate toward luminance to pull it back in
-    if (maxC > 1.0 || minC < 0.0) {
-      vec3 lumVec = vec3(lum);
-      vec3 diff = calibratedRGB - lumVec;
-      // Find the smallest blend factor t in [0,1] such that lum + t*diff is in [0,1]
-      float t = 1.0;
-      for (int ch = 0; ch < 3; ch++) {
-        float d = (ch == 0) ? diff.r : ((ch == 1) ? diff.g : diff.b);
-        float c = (ch == 0) ? calibratedRGB.r : ((ch == 1) ? calibratedRGB.g : calibratedRGB.b);
-        if (c > 1.0 && d > 0.001) {
-          t = min(t, (1.0 - lum) / d);
-        }
-        if (c < 0.0 && d < -0.001) {
-          t = min(t, -lum / d);
-        }
-      }
-      t = clamp(t, 0.0, 1.0);
-      calibratedRGB = lumVec + diff * t;
-    }
-    calibratedRGB = clamp(calibratedRGB, 0.0, 1.0);
-  }
+  vec3 calibratedRGB = compress_to_unit_gamut(u_primaryMatrix * linearRGB);
 
   // Step 3: HSV local mapping
   vec3 hsv = rgb2hsv(calibratedRGB);
@@ -193,7 +193,7 @@ void main() {
   vec3 mappedRGB = hsv2rgb(hsv);
 
   // Step 4: Toning (sRGB space for v1.2)
-  vec3 tonedRGB = applyToning(mappedRGB);
+  vec3 tonedRGB = compress_to_unit_gamut(applyToning(mappedRGB));
 
   // Step 5: Linear -> sRGB output
   vec3 outputRGB = linear_to_srgb_v(tonedRGB);
@@ -254,6 +254,31 @@ vec3 srgb_to_linear_v(vec3 c) {
 
 vec3 linear_to_srgb_v(vec3 c) {
   return vec3(linear_to_srgb(c.r), linear_to_srgb(c.g), linear_to_srgb(c.b));
+}
+
+vec3 compress_to_unit_gamut(vec3 rgb) {
+  float maxC = max(rgb.r, max(rgb.g, rgb.b));
+  float minC = min(rgb.r, min(rgb.g, rgb.b));
+  if (maxC <= 1.0 && minC >= 0.0) {
+    return rgb;
+  }
+
+  float neutral = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+  vec3 diff = rgb - vec3(neutral);
+  float scale = 1.0;
+  for (int ch = 0; ch < 3; ch++) {
+    float channel = ch == 0 ? rgb.r : (ch == 1 ? rgb.g : rgb.b);
+    float delta = ch == 0 ? diff.r : (ch == 1 ? diff.g : diff.b);
+    if (channel > 1.0 && delta > 0.000001) {
+      scale = min(scale, (1.0 - neutral) / delta);
+    }
+    if (channel < 0.0 && delta < -0.000001) {
+      scale = min(scale, neutral / -delta);
+    }
+  }
+  scale = clamp(scale, 0.0, 1.0);
+  float softenedScale = scale < 1.0 ? scale * (0.9 + 0.1 * scale) : 1.0;
+  return clamp(vec3(neutral) + diff * softenedScale, 0.0, 1.0);
 }
 
 vec3 rgb2hsv(vec3 c) {
@@ -328,36 +353,12 @@ void main() {
     return;
   }
   vec3 linearRGB = srgb_to_linear_v(texColor.rgb);
-  vec3 calibratedRGB = u_primaryMatrix * linearRGB;
-  {
-    float maxC = max(calibratedRGB.r, max(calibratedRGB.g, calibratedRGB.b));
-    float minC = min(calibratedRGB.r, min(calibratedRGB.g, calibratedRGB.b));
-    float lum = dot(calibratedRGB, vec3(0.2126, 0.7152, 0.0722));
-    lum = clamp(lum, 0.0, 1.0);
-    if (maxC > 1.0 || minC < 0.0) {
-      vec3 lumVec = vec3(lum);
-      vec3 diff = calibratedRGB - lumVec;
-      float t = 1.0;
-      for (int ch = 0; ch < 3; ch++) {
-        float d = (ch == 0) ? diff.r : ((ch == 1) ? diff.g : diff.b);
-        float c = (ch == 0) ? calibratedRGB.r : ((ch == 1) ? calibratedRGB.g : calibratedRGB.b);
-        if (c > 1.0 && d > 0.001) {
-          t = min(t, (1.0 - lum) / d);
-        }
-        if (c < 0.0 && d < -0.001) {
-          t = min(t, -lum / d);
-        }
-      }
-      t = clamp(t, 0.0, 1.0);
-      calibratedRGB = lumVec + diff * t;
-    }
-    calibratedRGB = clamp(calibratedRGB, 0.0, 1.0);
-  }
+  vec3 calibratedRGB = compress_to_unit_gamut(u_primaryMatrix * linearRGB);
   vec3 hsv = rgb2hsv(calibratedRGB);
   float hueShift = calculateLocalShift(hsv.x);
   hsv.x = fract(hsv.x + hueShift + u_globalHueShift);
   vec3 mappedRGB = hsv2rgb(hsv);
-  vec3 tonedRGB = applyToning(mappedRGB);
+  vec3 tonedRGB = compress_to_unit_gamut(applyToning(mappedRGB));
   vec3 outputRGB = linear_to_srgb_v(tonedRGB);
   outputRGB = applyToneCurve(outputRGB);
   gl_FragColor = vec4(clamp(outputRGB, 0.0, 1.0), texColor.a);

@@ -69,3 +69,42 @@ export function clamp(v: number, min: number, max: number): number {
 export function clampVec3(v: [number, number, number]): [number, number, number] {
   return [clamp(v[0], 0, 1), clamp(v[1], 0, 1), clamp(v[2], 0, 1)];
 }
+
+/**
+ * Compress linear RGB into display gamut by pulling chroma toward the neutral axis.
+ * This preserves white and avoids the harsh white/black clipping boundaries that
+ * appear when channels are simply clamped.
+ */
+export function compressLinearGamutVec3(rgb: [number, number, number]): [number, number, number] {
+  const [r, g, b] = rgb;
+  const maxC = Math.max(r, g, b);
+  const minC = Math.min(r, g, b);
+  if (maxC <= 1 && minC >= 0) {
+    return rgb;
+  }
+
+  const neutral = clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0, 1);
+  const dr = r - neutral;
+  const dg = g - neutral;
+  const db = b - neutral;
+
+  let scale = 1;
+  for (const [channel, delta] of [[r, dr], [g, dg], [b, db]] as const) {
+    if (channel > 1 && delta > 1e-6) {
+      scale = Math.min(scale, (1 - neutral) / delta);
+    }
+    if (channel < 0 && delta < -1e-6) {
+      scale = Math.min(scale, neutral / -delta);
+    }
+  }
+
+  // Keep the mapped color slightly inside the gamut boundary to avoid visible hard rims.
+  scale = clamp(scale, 0, 1);
+  const softenedScale = scale < 1 ? scale * (0.9 + 0.1 * scale) : 1;
+
+  return clampVec3([
+    neutral + dr * softenedScale,
+    neutral + dg * softenedScale,
+    neutral + db * softenedScale,
+  ]);
+}

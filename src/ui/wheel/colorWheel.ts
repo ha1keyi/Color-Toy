@@ -8,7 +8,13 @@
  * Also provides drawRendered() for a second canvas showing post-processing output.
  * Runs at 15fps independently from the main WebGL pipeline.
  */
-import { hsvToRgb } from '../../core/color/conversions';
+import {
+  compressLinearGamutVec3,
+  hsvToRgb,
+  linearToSrgbVec3,
+  rgbToHsv,
+  srgbToLinearVec3,
+} from '../../core/color/conversions';
 import {
   AppState,
   D65_WHITE_XY,
@@ -109,26 +115,6 @@ function shortestHueDelta(from: number, to: number): number {
   if (d > 0.5) d -= 1;
   if (d < -0.5) d += 1;
   return d;
-}
-
-function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const d = max - min;
-  let h = 0;
-
-  if (d > 1e-10) {
-    if (max === r) {
-      h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-    } else if (max === g) {
-      h = ((b - r) / d + 2) / 6;
-    } else {
-      h = ((r - g) / d + 4) / 6;
-    }
-  }
-
-  const s = max <= 0 ? 0 : d / max;
-  return { h, s, v: max };
 }
 
 function applyHueMappings(hue: number, state: AppState): number {
@@ -287,10 +273,19 @@ export class ColorWheel {
 
     // Draw the transformed hue ring (calibration + mapping/global hue)
     this.drawHueRing(ctx, center, radius, innerRadius, (r, g, b) => {
-      const calibrated = calibMatrix ? mulMat3Vec3(calibMatrix, [r, g, b]) : [r, g, b] as [number, number, number];
-      const hsv = rgbToHsv(calibrated[0], calibrated[1], calibrated[2]);
-      const mappedHue = applyHueMappings(hsv.h, state);
-      return hsvToRgb(mappedHue, hsv.s, hsv.v);
+      const linearInput = srgbToLinearVec3([r, g, b]);
+      const calibratedLinear = calibMatrix
+        ? mulMat3Vec3(calibMatrix, linearInput)
+        : linearInput;
+      const compressedLinear = compressLinearGamutVec3(calibratedLinear);
+      const [baseHue, baseSat, baseVal] = rgbToHsv(
+        compressedLinear[0],
+        compressedLinear[1],
+        compressedLinear[2]
+      );
+      const mappedHue = applyHueMappings(baseHue, state);
+      const mappedLinear = compressLinearGamutVec3(hsvToRgb(mappedHue, baseSat, baseVal));
+      return linearToSrgbVec3(mappedLinear);
     });
 
     switch (state.ui.activeLayer) {
@@ -337,23 +332,6 @@ export class ColorWheel {
 
       if (transform) {
         [r, g, b] = transform(r, g, b);
-        // Smooth gamut mapping: desaturate toward luminance instead of hard clamp
-        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        const lumC = Math.max(0, Math.min(1, lum));
-        const maxC = Math.max(r, g, b);
-        const minC = Math.min(r, g, b);
-        if (maxC > 1 || minC < 0) {
-          const dr = r - lumC, dg = g - lumC, db = b - lumC;
-          let t = 1;
-          for (const [c, d] of [[r, dr], [g, dg], [b, db]]) {
-            if (c > 1 && d > 0.001) t = Math.min(t, (1 - lumC) / d);
-            if (c < 0 && d < -0.001) t = Math.min(t, -lumC / d);
-          }
-          t = Math.max(0, Math.min(1, t));
-          r = lumC + dr * t;
-          g = lumC + dg * t;
-          b = lumC + db * t;
-        }
         r = Math.max(0, Math.min(1, r));
         g = Math.max(0, Math.min(1, g));
         b = Math.max(0, Math.min(1, b));
@@ -380,8 +358,10 @@ export class ColorWheel {
     matrix: Mat3 | null,
   ): void {
     const transform = matrix
-      ? (r: number, g: number, b: number): [number, number, number] =>
-          mulMat3Vec3(matrix, [r, g, b])
+      ? (r: number, g: number, b: number): [number, number, number] => {
+        const calibrated = mulMat3Vec3(matrix, srgbToLinearVec3([r, g, b]));
+        return linearToSrgbVec3(compressLinearGamutVec3(calibrated));
+      }
       : null;
     this.drawHueRing(ctx, center, radius, innerRadius, transform);
   }
