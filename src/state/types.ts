@@ -146,7 +146,7 @@ export function createInitialState(): AppState {
     globalHueShift: 0,
     toning: { ...DEFAULT_TONING },
     ui: {
-      activeLayer: 'toning',
+      activeLayer: 'calibration',
       selectedMappingId: null,
       previewResolution: 1080,
       splitView: false,

@@ -215,7 +215,7 @@ export class ColorWheel {
         }
         break;
       case 'toning':
-        // Toning mode: clear canvas and return early, no wheel drawn
+        // Toning mode: no wheel drawn.
         return;
     }
 
@@ -267,11 +267,6 @@ export class ColorWheel {
 
     ctx.clearRect(0, 0, cssSize, cssSize);
 
-    // Toning mode: no wheel rendered
-    if (state.ui.activeLayer === 'toning') {
-      return;
-    }
-
     // Build calibration matrix from the current primaries
     const calibMatrix = buildCalibrationMatrix(
       state.primaries.red,
@@ -303,6 +298,8 @@ export class ColorWheel {
       case 'mapping':
         this.drawRenderedMappingPoints(ctx, state, center, radius, innerRadius);
         break;
+      case 'toning':
+        return;
     }
 
     this.drawRenderedImageHueMarkers(ctx, state, center, radius, innerRadius);

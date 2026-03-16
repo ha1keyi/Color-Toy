@@ -2136,7 +2136,7 @@ function updatePanelUI(state: AppState): void {
   if (mappingPanel) mappingPanel.style.display = state.ui.activeLayer === 'mapping' ? 'block' : 'none';
   if (toningPanel) toningPanel.style.display = state.ui.activeLayer === 'toning' ? 'block' : 'none';
 
-  // Hide wheels for toning tab
+  // Wheels only shown for calibration and hue map.
   if (wheelsRow) wheelsRow.style.display = state.ui.activeLayer === 'toning' ? 'none' : 'flex';
 
   const splitBtn = document.getElementById('split-btn');
