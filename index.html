@@ -3,8 +3,14 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#0d0d14">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <title>Color Toy</title>
   <script type="module" src="/src/main.ts"></script>
   <link rel="stylesheet" href="/src/styles.css">
@@ -124,6 +130,14 @@
           </div>
         </div>
       </div>
+
+      <section id="history-panel" aria-label="Edit History">
+        <div class="history-panel-header">
+          <h3 class="history-panel-title">History</h3>
+          <span id="history-panel-status" class="history-panel-status">0 / 0</span>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </section>
 
       <!-- Dynamic Panels -->
       <div id="panels">
@@ -266,6 +280,12 @@
               Image</button>
             <button id="delete-mapping-btn" class="small-btn danger">Delete</button>
           </div>
+          <div class="picker-settings-row">
+            <label for="picker-radius-slider">Pick Radius</label>
+            <input type="range" id="picker-radius-slider" min="0" max="6" step="1" value="2">
+            <input type="number" id="picker-radius-slider-val" class="val-input" min="0" max="6" step="1" value="2">
+          </div>
+          <div id="picker-coord-readout" class="picker-coord-readout">Pixel: -, -</div>
           <div id="mapping-detail" style="display:none">
             <h4>Control Point</h4>
             <div class="slider-row">
@@ -313,6 +333,21 @@
           <div class="tone-curve-controls">
             <button id="tone-curve-enable-btn" class="small-btn" type="button">Tone Curve: On</button>
             <button id="tone-curve-bypass-btn" class="small-btn" type="button">A/B: Processed</button>
+          </div>
+          <div id="color-management-panel" class="color-management-panel">
+            <h4 class="color-management-title">Color Management</h4>
+            <div class="color-management-row">
+              <label for="working-space-select">Working Space</label>
+              <select id="working-space-select">
+                <option value="linear-srgb">Linear sRGB</option>
+                <option value="acescg">ACEScg</option>
+              </select>
+            </div>
+            <div class="color-management-row toggle-row">
+              <label for="gamut-compression-toggle">Soft Gamut Compression</label>
+              <button id="gamut-compression-toggle" class="small-btn" type="button">On</button>
+            </div>
+            <div id="icc-profile-readout" class="icc-profile-readout">ICC: Not detected</div>
           </div>
           <div class="slider-row">
             <label>Exposure</label>

@@ -6,8 +6,9 @@ import {
   VERTEX_SHADER, FRAGMENT_SHADER,
   VERTEX_SHADER_V1, FRAGMENT_SHADER_V1
 } from './shaders/colorProcessing';
-import { AppState } from '../state/types';
-import { identityMat3, buildCalibrationMatrix, Mat3 } from '../core/matrix/operations';
+import type { AppState } from '../state/types';
+import { identityMat3, buildCalibrationMatrix } from '../core/matrix/operations';
+import type { Mat3 } from '../core/matrix/operations';
 
 export interface RendererCapabilities {
   webgl2: boolean;
@@ -35,6 +36,9 @@ export class Renderer {
   private frameCount = 0;
   private lastFpsTime = 0;
   private currentFps = 60;
+  private renderScale = 1;
+  private logicalWidth = 0;
+  private logicalHeight = 0;
 
   // FBO for color picker
   private pickFBO: WebGLFramebuffer | null = null;
@@ -62,21 +66,21 @@ export class Renderer {
       preserveDrawingBuffer: false,
     } as const;
 
-    let gl = canvas.getContext('webgl2', strictAttrs) as WebGL2RenderingContext | null;
+    let gl = canvas.getContext('webgl2', strictAttrs) as (WebGL2RenderingContext | WebGLRenderingContext | null);
     this.isWebGL2 = !!gl;
 
     if (!gl) {
-      gl = canvas.getContext('webgl2', relaxedAttrs) as WebGL2RenderingContext | null;
+      gl = canvas.getContext('webgl2', relaxedAttrs) as (WebGL2RenderingContext | WebGLRenderingContext | null);
       this.isWebGL2 = !!gl;
     }
 
     if (!gl) {
-      gl = canvas.getContext('webgl', strictAttrs) as WebGLRenderingContext | null;
+      gl = canvas.getContext('webgl', strictAttrs) as (WebGL2RenderingContext | WebGLRenderingContext | null);
       this.isWebGL2 = false;
     }
 
     if (!gl) {
-      gl = canvas.getContext('webgl', relaxedAttrs) as WebGLRenderingContext | null;
+      gl = canvas.getContext('webgl', relaxedAttrs) as (WebGL2RenderingContext | WebGLRenderingContext | null);
       this.isWebGL2 = false;
     }
 
@@ -127,6 +131,7 @@ export class Renderer {
       'u_numMappings', 'u_exposure', 'u_contrast',
       'u_highlights', 'u_shadows', 'u_whites', 'u_blacks',
       'u_splitPosition', 'u_splitView', 'u_enableProcessing', 'u_useToneCurve',
+      'u_workingColorSpace', 'u_gamutCompression',
     ];
     for (const name of uniformNames) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
@@ -273,15 +278,45 @@ export class Renderer {
 
     this._imageWidth = image.width;
     this._imageHeight = image.height;
+    this.logicalWidth = image.width;
+    this.logicalHeight = image.height;
     this.needsRender = true;
   }
 
   resize(width: number, height: number): void {
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
+    this.logicalWidth = Math.max(1, Math.floor(width));
+    this.logicalHeight = Math.max(1, Math.floor(height));
+
+    const maxTex = this._capabilities.maxTextureSize;
+    const scaleByTexture = Math.min(
+      1,
+      maxTex / this.logicalWidth,
+      maxTex / this.logicalHeight,
+    );
+    const effectiveScale = Math.max(0.5, Math.min(1, this.renderScale * scaleByTexture));
+
+    const scaledWidth = Math.max(1, Math.floor(this.logicalWidth * effectiveScale));
+    const scaledHeight = Math.max(1, Math.floor(this.logicalHeight * effectiveScale));
+
+    if (this.canvas.width !== scaledWidth || this.canvas.height !== scaledHeight) {
+      this.canvas.width = scaledWidth;
+      this.canvas.height = scaledHeight;
       this.needsRender = true;
     }
+  }
+
+  setRenderScale(scale: number): void {
+    const clamped = Math.max(0.5, Math.min(1, scale));
+    if (Math.abs(clamped - this.renderScale) < 1e-4) {
+      return;
+    }
+    this.renderScale = clamped;
+    this.resize(this.logicalWidth || this.canvas.width || 1, this.logicalHeight || this.canvas.height || 1);
+    this.needsRender = true;
+  }
+
+  getRenderScale(): number {
+    return this.renderScale;
   }
 
   updateUniforms(state: AppState): void {
@@ -333,6 +368,8 @@ export class Renderer {
     gl.uniform1i(this.uniforms['u_enableProcessing'], state.ui.holdCompareActive ? 0 : 1);
     const useToneCurve = state.ui.toneCurveEnabled && !state.ui.toneCurveBypassPreview;
     gl.uniform1i(this.uniforms['u_useToneCurve'], useToneCurve ? 1 : 0);
+    gl.uniform1i(this.uniforms['u_workingColorSpace'], state.ui.workingColorSpace === 'acescg' ? 1 : 0);
+    gl.uniform1i(this.uniforms['u_gamutCompression'], state.ui.gamutCompressionEnabled ? 1 : 0);
 
     this.needsRender = true;
   }
@@ -384,7 +421,7 @@ export class Renderer {
   }
 
   /** Pick color at normalized (0-1) coordinates on the image */
-  pickColor(nx: number, ny: number): [number, number, number] | null {
+  pickColor(nx: number, ny: number, sampleRadiusPx = 0): [number, number, number] | null {
     const gl = this.gl;
     if (!this.program || !this.imageTexture) return null;
 
@@ -396,13 +433,34 @@ export class Renderer {
     // Instead, render full and readPixels at the correct position
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    const px = Math.floor(nx * this.canvas.width);
-    const py = Math.floor((1 - ny) * this.canvas.height); // Flip Y
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    const centerX = Math.floor(nx * width);
+    const centerY = Math.floor((1 - ny) * height); // Flip Y
 
-    const pixels = new Uint8Array(4);
-    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const radius = Math.max(0, Math.floor(sampleRadiusPx));
+    const startX = Math.max(0, centerX - radius);
+    const startY = Math.max(0, centerY - radius);
+    const endX = Math.min(width - 1, centerX + radius);
+    const endY = Math.min(height - 1, centerY + radius);
+    const sampleW = Math.max(1, endX - startX + 1);
+    const sampleH = Math.max(1, endY - startY + 1);
 
-    return [pixels[0] / 255, pixels[1] / 255, pixels[2] / 255];
+    const pixels = new Uint8Array(sampleW * sampleH * 4);
+    gl.readPixels(startX, startY, sampleW, sampleH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    const total = sampleW * sampleH;
+    for (let i = 0; i < total; i++) {
+      const o = i * 4;
+      r += pixels[o];
+      g += pixels[o + 1];
+      b += pixels[o + 2];
+    }
+
+    return [r / (255 * total), g / (255 * total), b / (255 * total)];
   }
 
   /** Export the current render at full resolution */

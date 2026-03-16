@@ -16,16 +16,16 @@ import {
   srgbToLinearVec3,
 } from '../../core/color/conversions';
 import {
-  AppState,
   SRGB_RED_XY,
   SRGB_GREEN_XY,
   SRGB_BLUE_XY,
 } from '../../state/types';
+import type { AppState } from '../../state/types';
 import {
   buildCalibrationMatrix,
   mulMat3Vec3,
-  Mat3,
 } from '../../core/matrix/operations';
+import type { Mat3 } from '../../core/matrix/operations';
 
 const TWO_PI = Math.PI * 2;
 
@@ -136,6 +136,7 @@ export class ColorWheel {
   private onMappingSelect: ((id: string | null) => void) | null = null;
   private onDragEnd: (() => void) | null = null;
   private imageHuePeaks: number[] = [];
+  private currentState: AppState | null = null;
 
   private isInsideOutsideMode(): boolean {
     const row = document.getElementById('wheels-row');
@@ -457,7 +458,7 @@ export class ColorWheel {
     _state: AppState,
     center: number,
     radius: number,
-    innerRadius: number,
+    _innerRadius: number,
   ): void {
     const colors = [
       { xy: SRGB_RED_XY, color: '#ff3333', label: 'R' },
@@ -751,19 +752,16 @@ export class ColorWheel {
     };
 
     // External state reference for interaction handlers
-    let currentState: AppState | null = null;
-    (this as any)._setState = (s: AppState) => { currentState = s; };
-
     const onDown = (x: number, y: number) => {
-      if (!currentState) return;
-      const hit = hitTest(x, y, currentState);
+      if (!this.currentState) return;
+      const hit = hitTest(x, y, this.currentState);
       if (hit) {
-        this.dragging = hit.type as any;
+        this.dragging = hit.type === 'mapping' || hit.type === 'global' ? hit.type : 'none';
         this.dragTarget = hit.id;
         if (hit.type === 'mapping' && this.onMappingSelect) {
           this.onMappingSelect(hit.id);
         }
-      } else if (currentState.ui.activeLayer === 'mapping') {
+      } else if (this.currentState.ui.activeLayer === 'mapping') {
         // Click on empty ring area: add new mapping point
         const { angle } = this.canvasToPolar(x, y);
         const dist = Math.sqrt((x - this.center) ** 2 + (y - this.center) ** 2);
@@ -775,7 +773,7 @@ export class ColorWheel {
     };
 
     const onMove = (x: number, y: number) => {
-      if (this.dragging === 'none' || !currentState) return;
+      if (this.dragging === 'none' || !this.currentState) return;
 
       const { angle } = this.canvasToPolar(x, y);
 
@@ -823,6 +821,6 @@ export class ColorWheel {
   }
 
   setState(state: AppState): void {
-    (this as any)._setState(state);
+    this.currentState = state;
   }
 }

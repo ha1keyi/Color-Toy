@@ -35,6 +35,8 @@ uniform float u_splitPosition;  // 0-1, position of split view divider
 uniform int u_splitView;        // 0 or 1
 uniform int u_enableProcessing; // 1 = process, 0 = passthrough
 uniform int u_useToneCurve;     // 1 = apply tone curve LUT
+uniform int u_workingColorSpace; // 0 = linear sRGB, 1 = ACEScg
+uniform int u_gamutCompression;  // 1 = enable compression
 
 // sRGB <-> Linear (IEC 61966-2-1)
 float srgb_to_linear(float c) {
@@ -52,6 +54,24 @@ vec3 srgb_to_linear_v(vec3 c) {
 
 vec3 linear_to_srgb_v(vec3 c) {
   return vec3(linear_to_srgb(c.r), linear_to_srgb(c.g), linear_to_srgb(c.b));
+}
+
+vec3 linear_srgb_to_acescg(vec3 c) {
+  mat3 M = mat3(
+    0.61313242, 0.33953802, 0.04741670,
+    0.07012438, 0.91639401, 0.01345152,
+    0.02058766, 0.10957457, 0.86978540
+  );
+  return M * c;
+}
+
+vec3 acescg_to_linear_srgb(vec3 c) {
+  mat3 M = mat3(
+    1.70485868, -0.62171602, -0.08329937,
+    -0.13007682, 1.14073577, -0.01055980,
+    -0.02396407, -0.12897551, 1.15301402
+  );
+  return M * c;
 }
 
 vec3 compress_to_unit_gamut(vec3 rgb) {
@@ -81,6 +101,10 @@ vec3 compress_to_unit_gamut(vec3 rgb) {
   scale = clamp(scale, 0.0, 1.0);
   float softenedScale = scale - softness * scale * (1.0 - scale);
   return clamp(vec3(neutral) + diff * softenedScale, 0.0, 1.0);
+}
+
+vec3 maybe_compress_to_unit_gamut(vec3 rgb) {
+  return u_gamutCompression == 1 ? compress_to_unit_gamut(rgb) : rgb;
 }
 
 // RGB <-> HSV
@@ -182,11 +206,14 @@ void main() {
 
   // Step 1: sRGB -> Linear
   vec3 linearRGB = srgb_to_linear_v(texColor.rgb);
+  vec3 workingRGB = u_workingColorSpace == 1
+    ? linear_srgb_to_acescg(linearRGB)
+    : linearRGB;
 
   // Step 2: Primary calibration (linear RGB -> calibrated linear RGB via XYZ)
   // Uses smooth gamut mapping instead of hard clamp to avoid white/black edges.
   // Preserves hue by desaturating toward the neutral axis when out-of-gamut.
-  vec3 calibratedRGB = compress_to_unit_gamut(u_primaryMatrix * linearRGB);
+  vec3 calibratedRGB = maybe_compress_to_unit_gamut(u_primaryMatrix * workingRGB);
 
   // Step 3: HSV local mapping
   vec3 hsv = rgb2hsv(calibratedRGB);
@@ -195,10 +222,15 @@ void main() {
   vec3 mappedRGB = hsv2rgb(hsv);
 
   // Step 4: Toning (sRGB space for v1.2)
-  vec3 tonedRGB = compress_to_unit_gamut(applyToning(mappedRGB));
+  vec3 tonedRGB = maybe_compress_to_unit_gamut(applyToning(mappedRGB));
+
+  vec3 outputLinearRGB = u_workingColorSpace == 1
+    ? acescg_to_linear_srgb(tonedRGB)
+    : tonedRGB;
+  outputLinearRGB = maybe_compress_to_unit_gamut(outputLinearRGB);
 
   // Step 5: Linear -> sRGB output
-  vec3 outputRGB = linear_to_srgb_v(tonedRGB);
+  vec3 outputRGB = linear_to_srgb_v(outputLinearRGB);
   outputRGB = applyToneCurve(outputRGB);
 
   fragColor = vec4(clamp(outputRGB, 0.0, 1.0), texColor.a);
@@ -240,6 +272,8 @@ uniform float u_splitPosition;
 uniform int u_splitView;
 uniform int u_enableProcessing;
 uniform int u_useToneCurve;
+uniform int u_workingColorSpace;
+uniform int u_gamutCompression;
 
 float srgb_to_linear(float c) {
   return (c <= 0.04045) ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4);
@@ -256,6 +290,24 @@ vec3 srgb_to_linear_v(vec3 c) {
 
 vec3 linear_to_srgb_v(vec3 c) {
   return vec3(linear_to_srgb(c.r), linear_to_srgb(c.g), linear_to_srgb(c.b));
+}
+
+vec3 linear_srgb_to_acescg(vec3 c) {
+  mat3 M = mat3(
+    0.61313242, 0.33953802, 0.04741670,
+    0.07012438, 0.91639401, 0.01345152,
+    0.02058766, 0.10957457, 0.86978540
+  );
+  return M * c;
+}
+
+vec3 acescg_to_linear_srgb(vec3 c) {
+  mat3 M = mat3(
+    1.70485868, -0.62171602, -0.08329937,
+    -0.13007682, 1.14073577, -0.01055980,
+    -0.02396407, -0.12897551, 1.15301402
+  );
+  return M * c;
 }
 
 vec3 compress_to_unit_gamut(vec3 rgb) {
@@ -283,6 +335,10 @@ vec3 compress_to_unit_gamut(vec3 rgb) {
   scale = clamp(scale, 0.0, 1.0);
   float softenedScale = scale - softness * scale * (1.0 - scale);
   return clamp(vec3(neutral) + diff * softenedScale, 0.0, 1.0);
+}
+
+vec3 maybe_compress_to_unit_gamut(vec3 rgb) {
+  return u_gamutCompression == 1 ? compress_to_unit_gamut(rgb) : rgb;
 }
 
 vec3 rgb2hsv(vec3 c) {
@@ -357,13 +413,20 @@ void main() {
     return;
   }
   vec3 linearRGB = srgb_to_linear_v(texColor.rgb);
-  vec3 calibratedRGB = compress_to_unit_gamut(u_primaryMatrix * linearRGB);
+  vec3 workingRGB = u_workingColorSpace == 1
+    ? linear_srgb_to_acescg(linearRGB)
+    : linearRGB;
+  vec3 calibratedRGB = maybe_compress_to_unit_gamut(u_primaryMatrix * workingRGB);
   vec3 hsv = rgb2hsv(calibratedRGB);
   float hueShift = calculateLocalShift(hsv.x);
   hsv.x = fract(hsv.x + hueShift + u_globalHueShift);
   vec3 mappedRGB = hsv2rgb(hsv);
-  vec3 tonedRGB = compress_to_unit_gamut(applyToning(mappedRGB));
-  vec3 outputRGB = linear_to_srgb_v(tonedRGB);
+  vec3 tonedRGB = maybe_compress_to_unit_gamut(applyToning(mappedRGB));
+  vec3 outputLinearRGB = u_workingColorSpace == 1
+    ? acescg_to_linear_srgb(tonedRGB)
+    : tonedRGB;
+  outputLinearRGB = maybe_compress_to_unit_gamut(outputLinearRGB);
+  vec3 outputRGB = linear_to_srgb_v(outputLinearRGB);
   outputRGB = applyToneCurve(outputRGB);
   gl_FragColor = vec4(clamp(outputRGB, 0.0, 1.0), texColor.a);
 }

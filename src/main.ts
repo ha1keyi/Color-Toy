@@ -3,12 +3,13 @@
  * Wires together: State, Renderer, ColorWheel (edit + rendered), UI Panels
  */
 import { store } from './state/store';
+import type { HistoryView } from './state/store';
 import {
-  AppState, LocalMapping,
   DEFAULT_CALIBRATION, DEFAULT_PRIMARIES, DEFAULT_TONING,
   SRGB_RED_XY, SRGB_GREEN_XY, SRGB_BLUE_XY, D65_WHITE_XY,
   calibrationToPrimaries, primariesToCalibration,
 } from './state/types';
+import type { AppState, LocalMapping } from './state/types';
 import { Renderer } from './gpu/renderer';
 import { ColorWheel } from './ui/wheel/colorWheel';
 import { rgbToHsv } from './core/color/conversions';
@@ -24,24 +25,191 @@ let colorWheel: ColorWheel;
 let originalImage: HTMLImageElement | null = null;
 let previewCanvas: HTMLCanvasElement | null = null;
 let renderedWheelCanvas: HTMLCanvasElement | null = null;
-let _wheelAnimFrame = 0;
 let dominantImageHues: number[] = [];
 type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'colorToy.theme';
+type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
 
 function readCssVar(name: string, fallback: string): string {
   const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
 }
 
-// Histogram throttle
-let lastHistogramTime = 0;
-const HISTOGRAM_INTERVAL = 1000 / 10; // ~10fps max
+const HISTOGRAM_INTERVAL_DESKTOP = 1000 / 10;
+const HISTOGRAM_INTERVAL_MOBILE = 1000 / 5;
 const TONE_CURVE_LUT_SIZE = 256;
 const DOMINANT_HUE_BINS = 72;
 const DOMINANT_HUE_COUNT = 6;
 
 type ToneCurvePoint = { x: number; y: number };
+
+const DEFAULT_TONE_CURVE_POINTS: ToneCurvePoint[] = [
+  { x: 0, y: 0 },
+  { x: 0.25, y: 0.25 },
+  { x: 0.5, y: 0.5 },
+  { x: 0.75, y: 0.75 },
+  { x: 1, y: 1 },
+];
+
+let uiRenderFrame = 0;
+let wheelRenderPending = false;
+let histogramRenderPending = false;
+let lastHistogramRenderTime = 0;
+let _deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
+
+function isCoarsePointerDevice(): boolean {
+  return window.matchMedia('(pointer: coarse)').matches;
+}
+
+function getHistogramInterval(): number {
+  return isCoarsePointerDevice() ? HISTOGRAM_INTERVAL_MOBILE : HISTOGRAM_INTERVAL_DESKTOP;
+}
+
+function getAdaptiveRenderScale(): number {
+  const dpr = window.devicePixelRatio || 1;
+  const coarsePointer = isCoarsePointerDevice();
+  const memory = (navigator as NavigatorWithDeviceMemory).deviceMemory ?? 4;
+
+  let scale = 1;
+
+  if (coarsePointer && dpr >= 3) {
+    scale = Math.min(scale, 0.75);
+  } else if (dpr >= 2) {
+    scale = Math.min(scale, 0.9);
+  }
+
+  if (memory <= 4) {
+    scale = Math.min(scale, 0.8);
+  }
+  if (memory <= 2) {
+    scale = Math.min(scale, 0.65);
+  }
+
+  return Math.max(0.55, Math.min(1, scale));
+}
+
+function requestUiRender(target: 'wheel' | 'histogram' | 'all' = 'all'): void {
+  if (target === 'wheel' || target === 'all') {
+    wheelRenderPending = true;
+  }
+  if (target === 'histogram' || target === 'all') {
+    histogramRenderPending = true;
+  }
+
+  if (!uiRenderFrame) {
+    uiRenderFrame = requestAnimationFrame(flushUiRenderQueue);
+  }
+}
+
+function flushUiRenderQueue(time: number): void {
+  uiRenderFrame = 0;
+  const state = store.getState();
+
+  if (wheelRenderPending && colorWheel) {
+    wheelRenderPending = false;
+    colorWheel.setState(state);
+    colorWheel.draw(state);
+    if (renderedWheelCanvas) {
+      colorWheel.drawRendered(state, renderedWheelCanvas);
+    }
+  }
+
+  if (histogramRenderPending) {
+    if (time - lastHistogramRenderTime >= getHistogramInterval()) {
+      histogramRenderPending = false;
+      lastHistogramRenderTime = time;
+      drawHistogram();
+    } else if (!uiRenderFrame) {
+      uiRenderFrame = requestAnimationFrame(flushUiRenderQueue);
+    }
+  }
+}
+
+function titleCaseLabel(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatHistoryTimestamp(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderHistoryPanel(history: HistoryView): void {
+  const list = document.getElementById('history-list');
+  const status = document.getElementById('history-panel-status');
+  const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement | null;
+  const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement | null;
+
+  if (undoBtn) {
+    undoBtn.disabled = !history.canUndo;
+  }
+  if (redoBtn) {
+    redoBtn.disabled = !history.canRedo;
+  }
+
+  if (status) {
+    status.textContent = history.entries.length === 0 ? '0 / 0' : `${history.index + 1} / ${history.entries.length}`;
+  }
+
+  if (!list) {
+    return;
+  }
+
+  const items = history.entries
+    .map((entry, index) => ({ ...entry, index }))
+    .reverse();
+
+  list.innerHTML = items
+    .map((entry) => `
+      <button class="history-item ${entry.index === history.index ? 'active' : ''}" data-history-index="${entry.index}" type="button">
+        <span class="history-item-main">
+          <span class="history-item-label">${escapeHtml(entry.label)}</span>
+          <span class="history-item-time">${formatHistoryTimestamp(entry.timestamp)}</span>
+        </span>
+        <span class="history-item-index">#${entry.index + 1}</span>
+      </button>
+    `)
+    .join('');
+
+  list.querySelectorAll('.history-item').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number((button as HTMLElement).dataset.historyIndex);
+      if (Number.isFinite(index)) {
+        store.goToHistory(index);
+      }
+    });
+  });
+}
+
+function setupHistoryPanel(): void {
+  store.registerHistorySource('toneCurve', {
+    capture: () => cloneToneCurvePoints(toneCurvePoints),
+    restore: (snapshot) => {
+      toneCurvePoints = isToneCurveSnapshot(snapshot)
+        ? cloneToneCurvePoints(snapshot)
+        : cloneToneCurvePoints(DEFAULT_TONE_CURVE_POINTS);
+      drawToneCurve();
+    },
+  });
+  store.subscribeHistory(renderHistoryPanel);
+}
 
 function init(): void {
   const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
@@ -59,6 +227,7 @@ function init(): void {
   // Initialize renderer
   try {
     renderer = new Renderer(glCanvas);
+    renderer.setRenderScale(getAdaptiveRenderScale());
     updateCapabilitiesDisplay();
   } catch (e) {
     const details = e instanceof Error ? e.message : String(e);
@@ -99,31 +268,21 @@ function init(): void {
   setupDoubleClickReset();
   setupXYDiagram();
   setupToneCurve();
+  setupHistoryPanel();
+  setupPwaHooks();
+  registerServiceWorker();
 
   // Initial render
   const state = store.getState();
-  const exportState: AppState = {
-    ...state,
-    ui: {
-      ...state.ui,
-      holdCompareActive: false,
-    },
-  };
   colorWheel.setImageHuePeaks(dominantImageHues);
   colorWheel.setState(state);
-  colorWheel.draw(state);
-  if (renderedWheelCanvas) {
-    colorWheel.drawRendered(state, renderedWheelCanvas);
-  }
+  requestUiRender('all');
 
   // Initial diagram renders
   if (state.ui.activeLayer === 'calibration') drawXYDiagram(state);
   if (state.ui.activeLayer === 'toning') drawToneCurve();
 
   updateToneCurveGPU();
-
-  // Start wheel animation loop (15fps)
-  startWheelLoop();
 
   // Handle window resize
   window.addEventListener('resize', handleResize);
@@ -152,12 +311,9 @@ function applyTheme(theme: ThemeMode, button?: HTMLButtonElement | null): void {
   }
 
   const state = store.getState();
-  colorWheel.draw(state);
-  if (renderedWheelCanvas) {
-    colorWheel.drawRendered(state, renderedWheelCanvas);
-  }
+  requestUiRender('wheel');
+  updateHistogram();
   drawToneCurve();
-  drawHistogram();
   if (state.ui.activeLayer === 'calibration') {
     drawXYDiagram(state);
   }
@@ -214,15 +370,11 @@ function onStateChange(state: AppState, _prev: AppState): void {
   renderer.requestRender();
   renderer.render();
 
-  colorWheel.setState(state);
-  colorWheel.draw(state);
-  if (renderedWheelCanvas) {
-    colorWheel.drawRendered(state, renderedWheelCanvas);
-  }
+  requestUiRender('wheel');
+  updateHistogram();
 
   updatePanelUI(state);
   updateLayerTabs(state);
-  updateHistogram();
 
   // Redraw xy diagram when calibration panel is visible
   if (state.ui.activeLayer === 'calibration') {
@@ -316,12 +468,93 @@ function setupImageInput(): void {
   }
 }
 
+async function readIccProfileFromFile(file: File): Promise<{ name: string | null; source: string | null }> {
+  const lowerName = file.name.toLowerCase();
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  const decodeAscii = (start: number, len: number): string =>
+    String.fromCharCode(...bytes.slice(start, start + len));
+
+  if ((file.type === 'image/jpeg' || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) && bytes.length > 12) {
+    let offset = 2;
+    while (offset + 4 < bytes.length) {
+      if (bytes[offset] !== 0xff) {
+        offset++;
+        continue;
+      }
+      const marker = bytes[offset + 1];
+      if (marker === 0xda || marker === 0xd9) break;
+      const segmentLength = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      if (segmentLength < 2 || offset + 2 + segmentLength > bytes.length) break;
+      if (marker === 0xe2) {
+        const id = decodeAscii(offset + 4, Math.min(11, bytes.length - (offset + 4)));
+        if (id.startsWith('ICC_PROFILE')) {
+          return { name: 'ICC_PROFILE', source: 'JPEG APP2' };
+        }
+      }
+      offset += 2 + segmentLength;
+    }
+  }
+
+  if ((file.type === 'image/png' || lowerName.endsWith('.png')) && bytes.length > 32) {
+    let offset = 8; // PNG signature
+    while (offset + 12 <= bytes.length) {
+      const length =
+        (bytes[offset] << 24) |
+        (bytes[offset + 1] << 16) |
+        (bytes[offset + 2] << 8) |
+        bytes[offset + 3];
+      const type = decodeAscii(offset + 4, 4);
+      const dataStart = offset + 8;
+      const dataEnd = dataStart + length;
+      if (dataEnd + 4 > bytes.length) break;
+
+      if (type === 'iCCP') {
+        let i = dataStart;
+        while (i < dataEnd && bytes[i] !== 0) i++;
+        const profileName = new TextDecoder('latin1').decode(bytes.slice(dataStart, i)).trim();
+        return {
+          name: profileName || 'Embedded ICC',
+          source: 'PNG iCCP',
+        };
+      }
+
+      offset = dataEnd + 4;
+    }
+  }
+
+  return { name: null, source: null };
+}
+
 function loadImageFile(file: File): void {
   if (!file.type.startsWith('image/')) return;
   if (!renderer) {
     showError('Renderer is not initialized, image cannot be processed.');
     return;
   }
+
+  void readIccProfileFromFile(file)
+    .then((icc) => {
+      const state = store.getState();
+      store.update({
+        ui: {
+          ...state.ui,
+          importedIccProfileName: icc.name,
+          importedIccSource: icc.source,
+        },
+      });
+    })
+    .catch(() => {
+      const state = store.getState();
+      store.update({
+        ui: {
+          ...state.ui,
+          importedIccProfileName: null,
+          importedIccSource: null,
+        },
+      });
+    });
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -336,6 +569,7 @@ function loadImageFile(file: File): void {
 
       // Size the GL canvas to match image resolution
       const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
+      renderer.setRenderScale(getAdaptiveRenderScale());
       renderer.resize(previewCanvas.width, previewCanvas.height);
 
       // Set CSS size to fit container
@@ -475,21 +709,32 @@ function setupToolbar(): void {
   };
 
   if (holdCompareBtn) {
-    holdCompareBtn.addEventListener('mousedown', (e) => {
+    let activePointerId: number | null = null;
+    const release = (pointerId?: number) => {
+      if (pointerId !== undefined && activePointerId !== null && pointerId !== activePointerId) {
+        return;
+      }
+      activePointerId = null;
+      setHoldCompare(false);
+    };
+
+    holdCompareBtn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
+      activePointerId = e.pointerId;
+      holdCompareBtn.setPointerCapture(e.pointerId);
       setHoldCompare(true);
     });
-    holdCompareBtn.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      setHoldCompare(true);
-    }, { passive: false });
 
-    const release = () => setHoldCompare(false);
-    holdCompareBtn.addEventListener('mouseup', release);
-    holdCompareBtn.addEventListener('mouseleave', release);
-    holdCompareBtn.addEventListener('touchend', release);
-    window.addEventListener('mouseup', release);
-    window.addEventListener('touchend', release);
+    holdCompareBtn.addEventListener('pointerup', (e) => release(e.pointerId));
+    holdCompareBtn.addEventListener('pointercancel', (e) => release(e.pointerId));
+    holdCompareBtn.addEventListener('lostpointercapture', () => release());
+    holdCompareBtn.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse') {
+        release(e.pointerId);
+      }
+    });
+    window.addEventListener('pointerup', (e) => release(e.pointerId));
   }
 
   // Reset All button
@@ -510,8 +755,9 @@ function setupToolbar(): void {
           toneCurveBypassPreview: false,
           holdCompareActive: false,
         },
-      }, true);
-      resetToneCurve(true);
+      });
+      resetToneCurve();
+      store.commitCurrent('Reset All');
     });
   }
 
@@ -521,15 +767,15 @@ function setupToolbar(): void {
     const module = el.dataset.module;
     el.addEventListener('click', () => {
       if (module === 'calibration') {
-        store.update({
+        store.commit({
           calibration: { ...DEFAULT_CALIBRATION },
           primaries: { ...DEFAULT_PRIMARIES },
-        }, true);
+        }, 'Reset Calibration');
       } else if (module === 'mapping') {
-        store.update({
+        store.commit({
           localMappings: [],
           globalHueShift: 0,
-        }, true);
+        }, 'Reset Hue Mapping');
       } else if (module === 'toning') {
         const state = store.getState();
         store.update({
@@ -539,8 +785,9 @@ function setupToolbar(): void {
             toneCurveEnabled: true,
             toneCurveBypassPreview: false,
           },
-        }, true);
-        resetToneCurve(true);
+        });
+        resetToneCurve();
+        store.commitCurrent('Reset Toning');
       }
     });
   });
@@ -565,19 +812,38 @@ function setupToolbar(): void {
   // Canvas click for color picker
   const glCanvas = document.getElementById('gl-canvas');
   if (glCanvas) {
-    glCanvas.addEventListener('click', (e) => {
+    const pickAtClient = (clientX: number, clientY: number) => {
       const state = store.getState();
       if (!state.ui.colorPickerActive || !state.imageLoaded || state.ui.activeLayer !== 'mapping') return;
 
       const rect = glCanvas.getBoundingClientRect();
-      const nx = (e.clientX - rect.left) / rect.width;
-      const ny = (e.clientY - rect.top) / rect.height;
+      const nx = (clientX - rect.left) / rect.width;
+      const ny = (clientY - rect.top) / rect.height;
+      const px = Math.max(0, Math.min(previewCanvas ? previewCanvas.width - 1 : 0, Math.round(nx * (previewCanvas?.width ?? 0))));
+      const py = Math.max(0, Math.min(previewCanvas ? previewCanvas.height - 1 : 0, Math.round(ny * (previewCanvas?.height ?? 0))));
 
-      const color = renderer.pickColor(nx, ny);
+      store.update({
+        ui: {
+          ...state.ui,
+          colorPickerCoord: { x: px, y: py },
+        },
+      });
+
+      const color = renderer.pickColor(nx, ny, state.ui.colorPickerRadiusPx);
       if (color) {
         const [h, s, _v] = rgbToHsv(color[0], color[1], color[2]);
         handleColorPicked(h, s);
       }
+    };
+
+    glCanvas.addEventListener('click', (e) => {
+      pickAtClient(e.clientX, e.clientY);
+    });
+
+    glCanvas.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'mouse') return;
+      e.preventDefault();
+      pickAtClient(e.clientX, e.clientY);
     });
   }
 }
@@ -589,6 +855,7 @@ function setupSplitDivider(): void {
   if (!divider || !container || !glCanvas) return;
 
   let dragging = false;
+  let activePointerId: number | null = null;
   let lastClientX = 0;
 
   const updateFromClientX = (clientX: number, commitHistory: boolean) => {
@@ -598,43 +865,51 @@ function setupSplitDivider(): void {
     const nx = (clientX - canvasRect.left) / canvasRect.width;
     const clamped = Math.max(0, Math.min(1, nx));
     const state = store.getState();
-    store.update({
+    const partial = {
       ui: { ...state.ui, splitPosition: clamped },
-    }, commitHistory);
+    };
+    if (commitHistory) {
+      store.commit(partial, 'Adjust Split View');
+    } else {
+      store.update(partial);
+    }
   };
 
-  divider.addEventListener('mousedown', (e) => {
+  divider.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
     dragging = true;
-  });
-
-  window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
+    activePointerId = e.pointerId;
+    divider.setPointerCapture(e.pointerId);
     updateFromClientX(e.clientX, false);
   });
 
-  window.addEventListener('mouseup', (e) => {
+  window.addEventListener('pointermove', (e) => {
     if (!dragging) return;
-    dragging = false;
-    updateFromClientX(e.clientX, true);
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    updateFromClientX(e.clientX, false);
   });
 
-  divider.addEventListener('touchstart', (e) => {
-    if (!e.touches[0]) return;
-    dragging = true;
-    e.preventDefault();
-  }, { passive: false });
-
-  window.addEventListener('touchmove', (e) => {
-    if (!dragging || !e.touches[0]) return;
-    updateFromClientX(e.touches[0].clientX, false);
-  }, { passive: true });
-
-  window.addEventListener('touchend', () => {
-    if (dragging) {
-      updateFromClientX(lastClientX, true);
+  const finishDrag = (pointerId?: number) => {
+    if (!dragging) return;
+    if (pointerId !== undefined && activePointerId !== null && pointerId !== activePointerId) {
+      return;
     }
     dragging = false;
+    activePointerId = null;
+    updateFromClientX(lastClientX, true);
+  };
+
+  window.addEventListener('pointerup', (e) => {
+    finishDrag(e.pointerId);
+  });
+
+  window.addEventListener('pointercancel', (e) => {
+    finishDrag(e.pointerId);
+  });
+
+  divider.addEventListener('lostpointercapture', () => {
+    finishDrag();
   });
 
   container.addEventListener('dblclick', (e) => {
@@ -677,11 +952,7 @@ function setupWheelCompareToggle(): void {
     btn.textContent = labels[mode];
 
     // Force immediate redraw so marker visibility/positions reflect mode switch.
-    const state = store.getState();
-    colorWheel.draw(state);
-    if (renderedWheelCanvas) {
-      colorWheel.drawRendered(state, renderedWheelCanvas);
-    }
+    requestUiRender('wheel');
   };
 
   applyMode();
@@ -702,7 +973,7 @@ function handleColorPicked(hue: number, _saturation: number): void {
     strength: 1.0,
   };
 
-  store.update({
+  store.commit({
     localMappings: [...state.localMappings, newMapping],
     ui: {
       ...state.ui,
@@ -710,7 +981,7 @@ function handleColorPicked(hue: number, _saturation: number): void {
       selectedMappingId: id,
       colorPickerActive: false,
     },
-  }, true);
+  }, 'Add Mapping From Picker');
 }
 
 // ============ Panels ============
@@ -718,9 +989,68 @@ function handleColorPicked(hue: number, _saturation: number): void {
 function setupPanels(): void {
   setupCalibrationSliders();
   setupXYInputs();
+  setupColorManagementControls();
   setupToningSliders();
   setupToneCurveControls();
   setupMappingControls();
+  setupColorPickerPrecisionControls();
+}
+
+function setupColorManagementControls(): void {
+  const workingSpaceSelect = document.getElementById('working-space-select') as HTMLSelectElement | null;
+  const gamutToggle = document.getElementById('gamut-compression-toggle') as HTMLButtonElement | null;
+
+  if (workingSpaceSelect) {
+    workingSpaceSelect.addEventListener('change', () => {
+      const state = store.getState();
+      const workingColorSpace = workingSpaceSelect.value === 'acescg' ? 'acescg' : 'linear-srgb';
+      store.commit({
+        ui: {
+          ...state.ui,
+          workingColorSpace,
+        },
+      }, `Set Working Space: ${workingColorSpace === 'acescg' ? 'ACEScg' : 'Linear sRGB'}`);
+    });
+  }
+
+  if (gamutToggle) {
+    gamutToggle.addEventListener('click', () => {
+      const state = store.getState();
+      store.commit({
+        ui: {
+          ...state.ui,
+          gamutCompressionEnabled: !state.ui.gamutCompressionEnabled,
+        },
+      }, state.ui.gamutCompressionEnabled ? 'Disable Soft Gamut Compression' : 'Enable Soft Gamut Compression');
+    });
+  }
+}
+
+function setupColorPickerPrecisionControls(): void {
+  const radiusSlider = document.getElementById('picker-radius-slider') as HTMLInputElement | null;
+  if (!radiusSlider) {
+    return;
+  }
+
+  radiusSlider.addEventListener('input', () => {
+    const state = store.getState();
+    store.update({
+      ui: {
+        ...state.ui,
+        colorPickerRadiusPx: Math.max(0, Math.min(6, Math.round(parseFloat(radiusSlider.value) || 0))),
+      },
+    });
+  });
+
+  radiusSlider.addEventListener('change', () => {
+    const state = store.getState();
+    store.commit({
+      ui: {
+        ...state.ui,
+        colorPickerRadiusPx: Math.max(0, Math.min(6, Math.round(parseFloat(radiusSlider.value) || 0))),
+      },
+    }, 'Set Picker Radius');
+  });
 }
 
 // ============ Calibration Sliders ============
@@ -769,10 +1099,10 @@ function setupCalibrationSliders(): void {
         },
       };
       const newPrimaries = calibrationToPrimaries(newCalibration);
-      store.update({
+      store.commit({
         calibration: newCalibration,
         primaries: newPrimaries,
-      }, true);
+      }, `Adjust ${titleCaseLabel(s.color)} ${s.param === 'hueShift' ? 'Hue' : 'Saturation'}`);
     });
   }
 }
@@ -835,10 +1165,10 @@ function setupXYInputs(): void {
           [color]: [parseFloat(xInput.value) || current[0], current[1]] as [number, number],
         };
         const newCalibration = primariesToCalibration(newPrimaries);
-        store.update({
+        store.commit({
           primaries: newPrimaries,
           calibration: newCalibration,
-        }, true);
+        }, `Adjust ${titleCaseLabel(color)} Primary X`);
       });
     }
 
@@ -864,10 +1194,10 @@ function setupXYInputs(): void {
           [color]: [current[0], parseFloat(yInput.value) || current[1]] as [number, number],
         };
         const newCalibration = primariesToCalibration(newPrimaries);
-        store.update({
+        store.commit({
           primaries: newPrimaries,
           calibration: newCalibration,
-        }, true);
+        }, `Adjust ${titleCaseLabel(color)} Primary Y`);
       });
     }
   }
@@ -877,12 +1207,12 @@ function setupXYInputs(): void {
 
 function setupToningSliders(): void {
   const sliders = [
-    { id: 'exposure-slider', key: 'exposure', min: -1, max: 1, step: 0.01 },
-    { id: 'contrast-slider', key: 'contrast', min: 0, max: 2.0, step: 0.005 },
-    { id: 'highlights-slider', key: 'highlights', min: -0.5, max: 0.5, step: 0.005 },
-    { id: 'shadows-slider', key: 'shadows', min: -0.5, max: 0.5, step: 0.005 },
-    { id: 'whites-slider', key: 'whites', min: -0.5, max: 0.5, step: 0.005 },
-    { id: 'blacks-slider', key: 'blacks', min: -0.5, max: 0.5, step: 0.005 },
+    { id: 'exposure-slider', key: 'exposure', min: -1, max: 1, step: 0.01, label: 'Adjust Exposure' },
+    { id: 'contrast-slider', key: 'contrast', min: 0, max: 2.0, step: 0.005, label: 'Adjust Contrast' },
+    { id: 'highlights-slider', key: 'highlights', min: -0.5, max: 0.5, step: 0.005, label: 'Adjust Highlights' },
+    { id: 'shadows-slider', key: 'shadows', min: -0.5, max: 0.5, step: 0.005, label: 'Adjust Shadows' },
+    { id: 'whites-slider', key: 'whites', min: -0.5, max: 0.5, step: 0.005, label: 'Adjust Whites' },
+    { id: 'blacks-slider', key: 'blacks', min: -0.5, max: 0.5, step: 0.005, label: 'Adjust Blacks' },
   ];
 
   for (const s of sliders) {
@@ -908,9 +1238,9 @@ function setupToningSliders(): void {
 
     el.addEventListener('change', () => {
       const state = store.getState();
-      store.update({
+      store.commit({
         toning: { ...state.toning, [s.key]: parseFloat(el.value) },
-      }, true);
+      }, s.label);
     });
   }
 
@@ -921,7 +1251,7 @@ function setupToningSliders(): void {
       store.update({ globalHueShift: parseFloat(hueSlider.value) });
     });
     hueSlider.addEventListener('change', () => {
-      store.update({ globalHueShift: parseFloat(hueSlider.value) }, true);
+      store.commit({ globalHueShift: parseFloat(hueSlider.value) }, 'Adjust Global Hue');
     });
   }
 }
@@ -933,12 +1263,12 @@ function setupToneCurveControls(): void {
 
   enableBtn.addEventListener('click', () => {
     const state = store.getState();
-    store.update({
+    store.commit({
       ui: {
         ...state.ui,
         toneCurveEnabled: !state.ui.toneCurveEnabled,
       },
-    }, true);
+    }, state.ui.toneCurveEnabled ? 'Disable Tone Curve' : 'Enable Tone Curve');
   });
 
   bypassBtn.addEventListener('click', () => {
@@ -994,10 +1324,10 @@ function setupMappingControls(): void {
     deleteBtn.addEventListener('click', () => {
       const state = store.getState();
       if (state.ui.selectedMappingId) {
-        store.update({
+        store.commit({
           localMappings: state.localMappings.filter(m => m.id !== state.ui.selectedMappingId),
           ui: { ...state.ui, selectedMappingId: null },
-        }, true);
+        }, 'Delete Mapping Point');
       }
     });
   }
@@ -1023,11 +1353,18 @@ function setupMappingControls(): void {
     const state = store.getState();
     const sel = state.ui.selectedMappingId;
     if (!sel) return;
-    store.update({
+    const labelMap: Record<keyof LocalMapping, string> = {
+      id: 'Edit Mapping ID',
+      srcHue: 'Adjust Mapping Source Hue',
+      dstHue: 'Adjust Mapping Target Hue',
+      range: 'Adjust Mapping Range',
+      strength: 'Adjust Mapping Strength',
+    };
+    store.commit({
       localMappings: state.localMappings.map(m =>
         m.id === sel ? { ...m, [field]: value } : m
       ),
-    }, true);
+    }, labelMap[field]);
   };
 
   if (srcSlider) {
@@ -1084,6 +1421,8 @@ function setupPresets(): void {
           if (preset) {
             savePreset(preset);
             renderPresetList();
+          } else {
+            window.alert('Invalid or unsupported preset file.');
           }
         };
         reader.readAsText(file);
@@ -1112,7 +1451,7 @@ function renderPresetList(): void {
       const preset = allPresets[idx];
       const state = store.getState();
       const updates = applyPreset(preset, state);
-      store.update(updates, true);
+      store.commit(updates, `Apply Preset: ${preset.name}`);
     });
   });
 }
@@ -1130,6 +1469,13 @@ function exportImage(): void {
   if (!originalImage) return;
 
   const state = store.getState();
+  const exportState: AppState = {
+    ...state,
+    ui: {
+      ...state.ui,
+      holdCompareActive: false,
+    },
+  };
 
   // Create temporary full-resolution canvas
   const offCanvas = document.createElement('canvas');
@@ -1154,12 +1500,31 @@ function exportImage(): void {
       a.download = 'color-toy-export.png';
       a.click();
       URL.revokeObjectURL(url);
+
+      const meta = {
+        exportedAt: new Date().toISOString(),
+        workingColorSpace: state.ui.workingColorSpace,
+        gamutCompressionEnabled: state.ui.gamutCompressionEnabled,
+        sourceIccProfile: state.ui.importedIccProfileName,
+        sourceIccContainer: state.ui.importedIccSource,
+      };
+      downloadTextFile('color-toy-export.icc.json', JSON.stringify(meta, null, 2), 'application/json');
     }, 'image/png');
 
     exportRenderer.destroy();
   } catch (e) {
     console.error('Export failed:', e);
   }
+}
+
+function downloadTextFile(fileName: string, text: string, mimeType: string): void {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 // ============ Keyboard Shortcuts ============
@@ -1191,10 +1556,10 @@ function setupKeyboard(): void {
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         // Delete selected mapping
         if (state.ui.selectedMappingId && state.ui.activeLayer === 'mapping') {
-          store.update({
+          store.commit({
             localMappings: state.localMappings.filter(m => m.id !== state.ui.selectedMappingId),
             ui: { ...state.ui, selectedMappingId: null },
-          }, true);
+          }, 'Delete Mapping Point');
         }
       }
     }
@@ -1262,6 +1627,7 @@ function setupValInputs(): void {
   const mappingSliders = [
     'mapping-src-slider', 'mapping-dst-slider',
     'mapping-range-slider', 'mapping-strength-slider',
+    'picker-radius-slider',
   ];
   for (const sliderId of mappingSliders) {
     const valInput = document.getElementById(sliderId + '-val') as HTMLInputElement;
@@ -1298,6 +1664,7 @@ function setupDoubleClickReset(): void {
     'global-hue-slider': 0,
     'mapping-src-slider': 0, 'mapping-dst-slider': 0,
     'mapping-range-slider': 0.083, 'mapping-strength-slider': 1,
+    'picker-radius-slider': 2,
   };
 
   for (const [id, defaultVal] of Object.entries(defaults)) {
@@ -1385,10 +1752,10 @@ function setupXYDiagram(): void {
   window.addEventListener('mouseup', () => {
     if (xyDragTarget) {
       const state = store.getState();
-      store.update({
+      store.commit({
         primaries: { ...state.primaries },
         calibration: { ...state.calibration },
-      }, true);
+      }, `Move ${titleCaseLabel(xyDragTarget)} Primary`);
       xyDragTarget = null;
     }
   });
@@ -1421,10 +1788,10 @@ function setupXYDiagram(): void {
   window.addEventListener('touchend', () => {
     if (xyDragTarget) {
       const state = store.getState();
-      store.update({
+      store.commit({
         primaries: { ...state.primaries },
         calibration: { ...state.calibration },
-      }, true);
+      }, `Move ${titleCaseLabel(xyDragTarget)} Primary`);
       xyDragTarget = null;
     }
   });
@@ -1579,64 +1946,34 @@ function drawXYDiagram(state: AppState): void {
 // ============ Tone Curve ============
 
 // Control points for the tone curve: array of {x, y} in [0,1]
-let toneCurvePoints: { x: number; y: number }[] = [
-  { x: 0, y: 0 },
-  { x: 0.25, y: 0.25 },
-  { x: 0.5, y: 0.5 },
-  { x: 0.75, y: 0.75 },
-  { x: 1, y: 1 },
-];
+let toneCurvePoints: ToneCurvePoint[] = cloneToneCurvePoints(DEFAULT_TONE_CURVE_POINTS);
 let tcDragIdx: number | null = null;
-let toneCurveHistory: ToneCurvePoint[][] = [];
-let toneCurveHistoryIndex = -1;
+let tcDragMode: 'move' | 'add' | null = null;
+let tcDragStartSnapshot: ToneCurvePoint[] | null = null;
 
 function cloneToneCurvePoints(points: ToneCurvePoint[]): ToneCurvePoint[] {
   return points.map((p) => ({ x: p.x, y: p.y }));
 }
 
-function pushToneCurveHistory(): void {
-  const snapshot = cloneToneCurvePoints(toneCurvePoints);
-  toneCurveHistory = toneCurveHistory.slice(0, toneCurveHistoryIndex + 1);
-  toneCurveHistory.push(snapshot);
-  if (toneCurveHistory.length > 40) {
-    toneCurveHistory.shift();
-  }
-  toneCurveHistoryIndex = toneCurveHistory.length - 1;
+function isToneCurveSnapshot(value: unknown): value is ToneCurvePoint[] {
+  return Array.isArray(value) && value.every((point) =>
+    typeof point === 'object' &&
+    point !== null &&
+    typeof (point as ToneCurvePoint).x === 'number' &&
+    typeof (point as ToneCurvePoint).y === 'number'
+  );
 }
 
-function canUndoToneCurve(): boolean {
-  return toneCurveHistoryIndex > 0;
+function toneCurvePointsEqual(left: ToneCurvePoint[], right: ToneCurvePoint[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((point, index) => {
+    const other = right[index];
+    return !!other && Math.abs(point.x - other.x) < 1e-6 && Math.abs(point.y - other.y) < 1e-6;
+  });
 }
 
-function canRedoToneCurve(): boolean {
-  return toneCurveHistoryIndex >= 0 && toneCurveHistoryIndex < toneCurveHistory.length - 1;
-}
-
-function undoToneCurve(): boolean {
-  if (!canUndoToneCurve()) return false;
-  toneCurveHistoryIndex--;
-  toneCurvePoints = cloneToneCurvePoints(toneCurveHistory[toneCurveHistoryIndex]);
-  drawToneCurve();
-  return true;
-}
-
-function redoToneCurve(): boolean {
-  if (!canRedoToneCurve()) return false;
-  toneCurveHistoryIndex++;
-  toneCurvePoints = cloneToneCurvePoints(toneCurveHistory[toneCurveHistoryIndex]);
-  drawToneCurve();
-  return true;
-}
-
-function resetToneCurve(pushHistory = false): void {
-  toneCurvePoints = [
-    { x: 0, y: 0 },
-    { x: 0.25, y: 0.25 },
-    { x: 0.5, y: 0.5 },
-    { x: 0.75, y: 0.75 },
-    { x: 1, y: 1 },
-  ];
-  if (pushHistory) pushToneCurveHistory();
+function resetToneCurve(): void {
+  toneCurvePoints = cloneToneCurvePoints(DEFAULT_TONE_CURVE_POINTS);
   drawToneCurve();
 }
 
@@ -1654,21 +1991,14 @@ function updateToneCurveGPU(): void {
   renderer.setToneCurveLut(buildToneCurveLut());
   renderer.requestRender();
   renderer.render();
+  requestUiRender('histogram');
 }
 
 function handleUndoAction(): void {
-  const state = store.getState();
-  if (state.ui.activeLayer === 'toning' && undoToneCurve()) {
-    return;
-  }
   store.undo();
 }
 
 function handleRedoAction(): void {
-  const state = store.getState();
-  if (state.ui.activeLayer === 'toning' && redoToneCurve()) {
-    return;
-  }
   store.redo();
 }
 
@@ -1676,11 +2006,24 @@ function setupToneCurve(): void {
   const canvas = document.getElementById('tone-curve-canvas') as HTMLCanvasElement;
   if (!canvas) return;
 
-  if (toneCurveHistory.length === 0) {
-    pushToneCurveHistory();
-  }
-
   const margin = 20;
+
+  const finishToneCurveGesture = () => {
+    if (tcDragIdx === null) {
+      tcDragMode = null;
+      tcDragStartSnapshot = null;
+      return;
+    }
+
+    const changed = tcDragStartSnapshot && !toneCurvePointsEqual(tcDragStartSnapshot, toneCurvePoints);
+    if (changed) {
+      store.commitCurrent(tcDragMode === 'add' ? 'Tone Curve: Add Point' : 'Tone Curve: Move Point');
+    }
+
+    tcDragIdx = null;
+    tcDragMode = null;
+    tcDragStartSnapshot = null;
+  };
 
   const getPos = (e: MouseEvent | Touch) => {
     const rect = canvas.getBoundingClientRect();
@@ -1722,19 +2065,19 @@ function setupToneCurve(): void {
     const pos = getPos(e);
     const idx = hitTestPoint(pos.x, pos.y);
     if (idx !== null) {
-      // Don't allow dragging endpoints off the edges
       tcDragIdx = idx;
+      tcDragMode = 'move';
+      tcDragStartSnapshot = cloneToneCurvePoints(toneCurvePoints);
     } else {
-      // Add new point
+      tcDragStartSnapshot = cloneToneCurvePoints(toneCurvePoints);
       const norm = pixToNorm(pos.x, pos.y);
-      // Insert maintaining x-sorted order
       let insertIdx = toneCurvePoints.length;
       for (let i = 0; i < toneCurvePoints.length; i++) {
         if (norm.x < toneCurvePoints[i].x) { insertIdx = i; break; }
       }
       toneCurvePoints.splice(insertIdx, 0, norm);
       tcDragIdx = insertIdx;
-      pushToneCurveHistory();
+      tcDragMode = 'add';
       drawToneCurve();
     }
   });
@@ -1759,8 +2102,7 @@ function setupToneCurve(): void {
   });
 
   window.addEventListener('mouseup', () => {
-    if (tcDragIdx !== null) pushToneCurveHistory();
-    tcDragIdx = null;
+    finishToneCurveGesture();
   });
 
   // Double-click to remove a point (not endpoints)
@@ -1769,8 +2111,8 @@ function setupToneCurve(): void {
     const idx = hitTestPoint(pos.x, pos.y);
     if (idx !== null && idx > 0 && idx < toneCurvePoints.length - 1) {
       toneCurvePoints.splice(idx, 1);
-      pushToneCurveHistory();
       drawToneCurve();
+      store.commitCurrent('Tone Curve: Remove Point');
     }
   });
 
@@ -1781,7 +2123,10 @@ function setupToneCurve(): void {
     const idx = hitTestPoint(pos.x, pos.y);
     if (idx !== null) {
       tcDragIdx = idx;
+      tcDragMode = 'move';
+      tcDragStartSnapshot = cloneToneCurvePoints(toneCurvePoints);
     } else {
+      tcDragStartSnapshot = cloneToneCurvePoints(toneCurvePoints);
       const norm = pixToNorm(pos.x, pos.y);
       let insertIdx = toneCurvePoints.length;
       for (let i = 0; i < toneCurvePoints.length; i++) {
@@ -1789,7 +2134,7 @@ function setupToneCurve(): void {
       }
       toneCurvePoints.splice(insertIdx, 0, norm);
       tcDragIdx = insertIdx;
-      pushToneCurveHistory();
+      tcDragMode = 'add';
       drawToneCurve();
     }
   }, { passive: false });
@@ -1812,8 +2157,7 @@ function setupToneCurve(): void {
   });
 
   window.addEventListener('touchend', () => {
-    if (tcDragIdx !== null) pushToneCurveHistory();
-    tcDragIdx = null;
+    finishToneCurveGesture();
   });
 }
 
@@ -1935,29 +2279,6 @@ function evalCurve(t: number, pts: { x: number; y: number }[]): number {
 
 // ============ Color Wheel Callbacks ============
 
-function handlePrimaryChange(color: string, hue: number, sat: number): void {
-  const state = store.getState();
-  // Convert hue/sat back to approximate chromaticity coordinates
-  const wx = 0.3127, wy = 0.3290;
-  const angle = hue * Math.PI * 2;
-  const dist = sat * 0.4;
-  const x = wx + Math.cos(angle) * dist;
-  const y = wy + Math.sin(angle) * dist;
-
-  const newPrimaries = {
-    ...state.primaries,
-    [color]: [Math.max(0.01, Math.min(0.99, x)), Math.max(0.01, Math.min(0.99, y))] as [number, number],
-  };
-
-  // Reverse-compute calibration from the new primaries
-  const newCalibration = primariesToCalibration(newPrimaries);
-
-  store.update({
-    primaries: newPrimaries,
-    calibration: newCalibration,
-  });
-}
-
 function handleMappingHueChange(id: string, hue: number): void {
   const state = store.getState();
   store.update({
@@ -1972,7 +2293,7 @@ function handleMappingAdd(hue: number): void {
   if (state.localMappings.length >= (renderer?.capabilities.maxMappings ?? 8)) return;
 
   const id = 'mp_' + Date.now();
-  store.update({
+  store.commit({
     localMappings: [...state.localMappings, {
       id,
       srcHue: hue,
@@ -1981,7 +2302,7 @@ function handleMappingAdd(hue: number): void {
       strength: 1.0,
     }],
     ui: { ...state.ui, selectedMappingId: id },
-  }, true);
+  }, 'Add Mapping Point');
 }
 
 function handleGlobalHueChange(shift: number): void {
@@ -1996,14 +2317,7 @@ function handleMappingSelect(id: string | null): void {
 }
 
 function handleDragEnd(): void {
-  // Push to history after drag completes
-  const state = store.getState();
-  store.update({
-    calibration: { ...state.calibration },
-    primaries: { ...state.primaries },
-    localMappings: [...state.localMappings],
-    globalHueShift: state.globalHueShift,
-  }, true);
+  store.commitCurrent('Adjust Hue Mapping');
 }
 
 // ============ Performance Monitor ============
@@ -2012,6 +2326,9 @@ function setupPerformanceMonitor(): void {
   renderer.onFps((fps) => {
     // Auto-downgrade resolution if needed
     if (fps < 20) {
+      const loweredScale = Math.max(0.55, renderer.getRenderScale() - 0.1);
+      renderer.setRenderScale(loweredScale);
+
       const state = store.getState();
       if (state.ui.previewResolution > 512 && previewCanvas && originalImage) {
         const newRes = state.ui.previewResolution === 1080 ? 720 : 512;
@@ -2020,8 +2337,11 @@ function setupPerformanceMonitor(): void {
         });
         previewCanvas = scaleImageToCanvas(originalImage, newRes);
         refreshDominantImageHues();
+        renderer.setRenderScale(Math.min(renderer.getRenderScale(), getAdaptiveRenderScale()));
         renderer.loadImage(previewCanvas);
       }
+    } else if (fps > 40) {
+      renderer.setRenderScale(getAdaptiveRenderScale());
     }
   });
 }
@@ -2029,16 +2349,14 @@ function setupPerformanceMonitor(): void {
 // ============ Histogram ============
 
 function updateHistogram(): void {
-  const now = performance.now();
-  if (now - lastHistogramTime < HISTOGRAM_INTERVAL) return;
-  lastHistogramTime = now;
-
-  requestAnimationFrame(() => {
-    drawHistogram();
-  });
+  requestUiRender('histogram');
 }
 
 function drawHistogram(): void {
+  if (document.visibilityState !== 'visible') {
+    return;
+  }
+
   const histCanvas = document.getElementById('histogram-canvas') as HTMLCanvasElement;
   if (!histCanvas) return;
 
@@ -2056,7 +2374,8 @@ function drawHistogram(): void {
   const h = glCanvas.height;
 
   // Sample a subset for performance (every Nth pixel)
-  const sampleStep = Math.max(1, Math.floor(Math.sqrt(w * h / 10000)));
+  const targetSamples = isCoarsePointerDevice() ? 4000 : 10000;
+  const sampleStep = Math.max(1, Math.floor(Math.sqrt(w * h / targetSamples)));
   const sampleW = Math.ceil(w / sampleStep);
   const sampleH = Math.ceil(h / sampleStep);
 
@@ -2152,6 +2471,37 @@ function updatePanelUI(state: AppState): void {
   if (mappingPickerBtn) {
     mappingPickerBtn.classList.toggle('active', state.ui.colorPickerActive && state.ui.activeLayer === 'mapping');
     mappingPickerBtn.disabled = !state.imageLoaded;
+  }
+
+  const workingSpaceSelect = document.getElementById('working-space-select') as HTMLSelectElement | null;
+  if (workingSpaceSelect && document.activeElement !== workingSpaceSelect) {
+    workingSpaceSelect.value = state.ui.workingColorSpace;
+  }
+
+  const gamutToggle = document.getElementById('gamut-compression-toggle') as HTMLButtonElement | null;
+  if (gamutToggle) {
+    gamutToggle.classList.toggle('active', state.ui.gamutCompressionEnabled);
+    gamutToggle.textContent = state.ui.gamutCompressionEnabled ? 'On' : 'Off';
+  }
+
+  const iccReadout = document.getElementById('icc-profile-readout');
+  if (iccReadout) {
+    if (state.ui.importedIccProfileName) {
+      const src = state.ui.importedIccSource ? ` (${state.ui.importedIccSource})` : '';
+      iccReadout.textContent = `ICC: ${state.ui.importedIccProfileName}${src}`;
+    } else {
+      iccReadout.textContent = 'ICC: Not detected';
+    }
+  }
+
+  updateSlider('picker-radius-slider', state.ui.colorPickerRadiusPx);
+  const pickerCoordReadout = document.getElementById('picker-coord-readout');
+  if (pickerCoordReadout) {
+    if (state.ui.colorPickerCoord) {
+      pickerCoordReadout.textContent = `Pixel: ${state.ui.colorPickerCoord.x}, ${state.ui.colorPickerCoord.y}`;
+    } else {
+      pickerCoordReadout.textContent = 'Pixel: -, -';
+    }
   }
 
   // Update calibration slider values
@@ -2272,12 +2622,11 @@ function updateCapabilitiesDisplay(): void {
 // ============ Resize ============
 
 function handleResize(): void {
+  renderer.setRenderScale(getAdaptiveRenderScale());
   colorWheel.resize();
   const state = store.getState();
-  colorWheel.draw(state);
-  if (renderedWheelCanvas) {
-    colorWheel.drawRendered(state, renderedWheelCanvas);
-  }
+  requestUiRender('wheel');
+  updateHistogram();
 
   // Redraw diagrams
   if (state.ui.activeLayer === 'calibration') drawXYDiagram(state);
@@ -2297,6 +2646,7 @@ function handleResize(): void {
       }
       glCanvas.style.width = Math.floor(cssW) + 'px';
       glCanvas.style.height = Math.floor(cssH) + 'px';
+      renderer.resize(previewCanvas.width, previewCanvas.height);
       renderer.updateUniforms(state);
       renderer.render();
     }
@@ -2306,30 +2656,37 @@ function handleResize(): void {
   updateSplitDividerUI(state);
 }
 
-function startWheelLoop(): void {
-  let lastTime = 0;
-  const interval = 1000 / 15; // 15fps
-
-  const loop = (time: number) => {
-    if (time - lastTime >= interval) {
-      const state = store.getState();
-      colorWheel.draw(state);
-      if (renderedWheelCanvas) {
-        colorWheel.drawRendered(state, renderedWheelCanvas);
-      }
-      lastTime = time;
-    }
-    _wheelAnimFrame = requestAnimationFrame(loop);
-  };
-  _wheelAnimFrame = requestAnimationFrame(loop);
-}
-
 function showError(msg: string): void {
   const el = document.getElementById('error-msg');
   if (el) {
     el.textContent = msg;
     el.style.display = 'block';
   }
+}
+
+function setupPwaHooks(): void {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    _deferredInstallPrompt = e as BeforeInstallPromptEvent;
+    document.documentElement.classList.add('pwa-install-ready');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    _deferredInstallPrompt = null;
+    document.documentElement.classList.remove('pwa-install-ready');
+  });
+}
+
+function registerServiceWorker(): void {
+  if (!('serviceWorker' in navigator)) {
+    return;
+  }
+
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.warn('Service worker registration failed:', error);
+    });
+  });
 }
 
 // Initialize on DOM ready

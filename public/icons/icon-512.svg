@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="35%" cy="25%" r="80%">
+      <stop offset="0%" stop-color="#1f2a3d" />
+      <stop offset="100%" stop-color="#0a0a0a" />
+    </radialGradient>
+    <conicGradient id="ring" cx="256" cy="256" r="186" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ff4d4d" />
+      <stop offset="33%" stop-color="#53d17b" />
+      <stop offset="66%" stop-color="#3b90ff" />
+      <stop offset="100%" stop-color="#ff4d4d" />
+    </conicGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="124" fill="url(#bg)" />
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ring)" stroke-width="66" />
+  <circle cx="256" cy="256" r="34" fill="#f3f6fc" />
+</svg>

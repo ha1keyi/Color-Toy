@@ -4,6 +4,7 @@
  */
 
 export type LayerType = 'calibration' | 'mapping' | 'toning';
+export type WorkingColorSpace = 'linear-srgb' | 'acescg';
 
 export interface LocalMapping {
   id: string;
@@ -44,9 +45,15 @@ export interface UIState {
   activeLayer: LayerType;
   selectedMappingId: string | null;
   previewResolution: 1080 | 720 | 512;
+  workingColorSpace: WorkingColorSpace;
+  gamutCompressionEnabled: boolean;
   splitView: boolean;
   splitPosition: number;
   colorPickerActive: boolean;
+  colorPickerRadiusPx: number;
+  colorPickerCoord: { x: number; y: number } | null;
+  importedIccProfileName: string | null;
+  importedIccSource: string | null;
   showXYPanel: boolean;
   toneCurveEnabled: boolean;
   toneCurveBypassPreview: boolean;
@@ -149,9 +156,15 @@ export function createInitialState(): AppState {
       activeLayer: 'calibration',
       selectedMappingId: null,
       previewResolution: 1080,
+      workingColorSpace: 'linear-srgb',
+      gamutCompressionEnabled: true,
       splitView: false,
       splitPosition: 0.5,
       colorPickerActive: false,
+      colorPickerRadiusPx: 2,
+      colorPickerCoord: null,
+      importedIccProfileName: null,
+      importedIccSource: null,
       showXYPanel: false,
       toneCurveEnabled: true,
       toneCurveBypassPreview: false,

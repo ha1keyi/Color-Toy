@@ -12,15 +12,17 @@
  *   - Portrait Soft: flattering skin-tone rendering with gentle contrast rolloff
  */
 import {
+  DEFAULT_CALIBRATION,
+  DEFAULT_TONING,
+  calibrationToPrimaries,
+} from '../state/types';
+import type {
   AppState,
   PrimariesState,
+  CalibrationChannel,
   CalibrationState,
   ToningState,
   LocalMapping,
-  DEFAULT_CALIBRATION,
-  DEFAULT_PRIMARIES,
-  DEFAULT_TONING,
-  calibrationToPrimaries,
 } from '../state/types';
 
 // ---------------------------------------------------------------------------
@@ -48,16 +50,153 @@ export interface CreativeMappingPreset {
 
 export type Preset = ColorStylePreset | CreativeMappingPreset;
 
+const PRESET_SCHEMA_VERSION = '2.0';
+
 // ---------------------------------------------------------------------------
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
 const PRESETS_KEY = 'color-toy-presets';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeName(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
+function normalizeCreatedAt(value: unknown): string {
+  if (typeof value !== 'string') {
+    return new Date().toISOString();
+  }
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? new Date().toISOString() : new Date(timestamp).toISOString();
+}
+
+function normalizeCalibrationChannel(value: unknown): CalibrationChannel {
+  const record = isRecord(value) ? value : {};
+  return {
+    hueShift: clampNumber(record.hueShift, -180, 180, 0),
+    saturation: clampNumber(record.saturation, -100, 100, 0),
+  };
+}
+
+function normalizeCalibration(value: unknown): CalibrationState {
+  const record = isRecord(value) ? value : {};
+  return {
+    red: normalizeCalibrationChannel(record.red),
+    green: normalizeCalibrationChannel(record.green),
+    blue: normalizeCalibrationChannel(record.blue),
+  };
+}
+
+function normalizeToning(value: unknown): ToningState {
+  const record = isRecord(value) ? value : {};
+  return {
+    exposure: clampNumber(record.exposure, -2, 2, DEFAULT_TONING.exposure),
+    contrast: clampNumber(record.contrast, 0.5, 2.0, DEFAULT_TONING.contrast),
+    highlights: clampNumber(record.highlights, -1, 1, DEFAULT_TONING.highlights),
+    shadows: clampNumber(record.shadows, -1, 1, DEFAULT_TONING.shadows),
+    whites: clampNumber(record.whites, -1, 1, DEFAULT_TONING.whites),
+    blacks: clampNumber(record.blacks, -1, 1, DEFAULT_TONING.blacks),
+  };
+}
+
+function normalizeLocalMapping(value: unknown, index: number): LocalMapping | null {
+  const record = isRecord(value) ? value : null;
+  if (!record) {
+    return null;
+  }
+
+  const srcHue = clampNumber(record.srcHue, 0, 1, NaN);
+  const dstHue = clampNumber(record.dstHue, 0, 1, NaN);
+  if (Number.isNaN(srcHue) || Number.isNaN(dstHue)) {
+    return null;
+  }
+
+  return {
+    id: normalizeName(record.id, `mapping-${index + 1}`),
+    srcHue,
+    dstHue,
+    range: clampNumber(record.range, 0, 0.5, 0.08),
+    strength: clampNumber(record.strength, 0, 1, 1),
+  };
+}
+
+function normalizeVersion(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value : '1.0';
+}
+
+function normalizePreset(value: unknown): Preset | null {
+  const record = isRecord(value) ? value : null;
+  if (!record) {
+    return null;
+  }
+
+  const type = record.type;
+  const name = normalizeName(record.name, 'Imported Preset');
+  const createdAt = normalizeCreatedAt(record.createdAt);
+  const version = normalizeVersion(record.version);
+
+  if (type === 'color_style') {
+    return {
+      version: PRESET_SCHEMA_VERSION,
+      type,
+      name,
+      calibration: normalizeCalibration(record.calibration),
+      toning: normalizeToning(record.toning),
+      createdAt: version === PRESET_SCHEMA_VERSION ? createdAt : new Date(createdAt).toISOString(),
+    };
+  }
+
+  if (type === 'creative_mapping') {
+    const mappings = Array.isArray(record.localMappings)
+      ? record.localMappings
+          .map((mapping, index) => normalizeLocalMapping(mapping, index))
+          .filter((mapping): mapping is LocalMapping => mapping !== null)
+      : [];
+
+    return {
+      version: PRESET_SCHEMA_VERSION,
+      type,
+      name,
+      localMappings: mappings,
+      globalHueShift: clampNumber(record.globalHueShift, -1, 1, 0),
+      baseCalibration: normalizeCalibration(record.baseCalibration),
+      createdAt,
+    };
+  }
+
+  return null;
+}
+
 export function getStoredPresets(): Preset[] {
   try {
     const raw = localStorage.getItem(PRESETS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((preset) => normalizePreset(preset))
+      .filter((preset): preset is Preset => preset !== null);
   } catch {
     return [];
   }
@@ -65,7 +204,11 @@ export function getStoredPresets(): Preset[] {
 
 export function savePreset(preset: Preset): void {
   const presets = getStoredPresets();
-  presets.push(preset);
+  const normalizedPreset = normalizePreset(preset);
+  if (!normalizedPreset) {
+    return;
+  }
+  presets.push(normalizedPreset);
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
 }
 
@@ -81,13 +224,13 @@ export function deletePreset(index: number): void {
 
 export function createColorStylePreset(name: string, state: AppState): ColorStylePreset {
   return {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'color_style',
-    name,
+    name: normalizeName(name, 'Color Style'),
     calibration: {
-      red:   { ...state.calibration.red },
+      red: { ...state.calibration.red },
       green: { ...state.calibration.green },
-      blue:  { ...state.calibration.blue },
+      blue: { ...state.calibration.blue },
     },
     toning: { ...state.toning },
     createdAt: new Date().toISOString(),
@@ -96,15 +239,15 @@ export function createColorStylePreset(name: string, state: AppState): ColorStyl
 
 export function createCreativeMappingPreset(name: string, state: AppState): CreativeMappingPreset {
   return {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'creative_mapping',
-    name,
+    name: normalizeName(name, 'Creative Mapping'),
     localMappings: state.localMappings.map(m => ({ ...m })),
     globalHueShift: state.globalHueShift,
     baseCalibration: {
-      red:   { ...state.calibration.red },
+      red: { ...state.calibration.red },
       green: { ...state.calibration.green },
-      blue:  { ...state.calibration.blue },
+      blue: { ...state.calibration.blue },
     },
     createdAt: new Date().toISOString(),
   };
@@ -117,9 +260,9 @@ export function createCreativeMappingPreset(name: string, state: AppState): Crea
 export function applyPreset(preset: Preset, currentState: AppState): Partial<AppState> {
   if (preset.type === 'color_style') {
     const calibration: CalibrationState = {
-      red:   { ...preset.calibration.red },
+      red: { ...preset.calibration.red },
       green: { ...preset.calibration.green },
-      blue:  { ...preset.calibration.blue },
+      blue: { ...preset.calibration.blue },
     };
     const primaries: PrimariesState = calibrationToPrimaries(calibration);
     return {
@@ -132,12 +275,12 @@ export function applyPreset(preset: Preset, currentState: AppState): Partial<App
     const cc = currentState.calibration;
     const bc = preset.baseCalibration;
     const diff =
-      Math.abs(cc.red.hueShift   - bc.red.hueShift)   +
-      Math.abs(cc.red.saturation  - bc.red.saturation)  +
-      Math.abs(cc.green.hueShift  - bc.green.hueShift)  +
+      Math.abs(cc.red.hueShift - bc.red.hueShift) +
+      Math.abs(cc.red.saturation - bc.red.saturation) +
+      Math.abs(cc.green.hueShift - bc.green.hueShift) +
       Math.abs(cc.green.saturation - bc.green.saturation) +
-      Math.abs(cc.blue.hueShift   - bc.blue.hueShift)   +
-      Math.abs(cc.blue.saturation  - bc.blue.saturation);
+      Math.abs(cc.blue.hueShift - bc.blue.hueShift) +
+      Math.abs(cc.blue.saturation - bc.blue.saturation);
 
     if (diff > 30) { // significant calibration difference
       console.warn('Calibration mismatch detected, creative mapping effect may differ');
@@ -163,21 +306,21 @@ export const BUILTIN_PRESETS: ColorStylePreset[] = [
   // Toning adds gentle lift in exposure + contrast with warm highlight bias
   // and deeper shadows for dimension.
   {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'color_style',
     name: 'Warm Autumn',
     calibration: {
-      red:   { hueShift: -5,  saturation: 15  },
+      red: { hueShift: -5, saturation: 15 },
       green: { hueShift: -15, saturation: -10 },
-      blue:  { hueShift: -8,  saturation: -5  },
+      blue: { hueShift: -8, saturation: -5 },
     },
     toning: {
-      exposure:   0.15,
-      contrast:   1.12,
+      exposure: 0.15,
+      contrast: 1.12,
       highlights: 0.08,
-      shadows:   -0.12,
-      whites:    -0.05,
-      blacks:     0.05,
+      shadows: -0.12,
+      whites: -0.05,
+      blacks: 0.05,
     },
     createdAt: '2024-01-01T00:00:00Z',
   },
@@ -191,21 +334,21 @@ export const BUILTIN_PRESETS: ColorStylePreset[] = [
   // Toning pulls exposure slightly down, lifts shadows for a hazy feel,
   // and crushes blacks gently for cinematic depth.
   {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'color_style',
     name: 'Cool Blue',
     calibration: {
-      red:   { hueShift:  3,  saturation: -8  },
-      green: { hueShift:  5,  saturation:  5  },
-      blue:  { hueShift: -10, saturation:  20 },
+      red: { hueShift: 3, saturation: -8 },
+      green: { hueShift: 5, saturation: 5 },
+      blue: { hueShift: -10, saturation: 20 },
     },
     toning: {
-      exposure:  -0.08,
-      contrast:   1.08,
-      highlights:-0.10,
-      shadows:    0.15,
-      whites:     0.05,
-      blacks:    -0.08,
+      exposure: -0.08,
+      contrast: 1.08,
+      highlights: -0.10,
+      shadows: 0.15,
+      whites: 0.05,
+      blacks: -0.08,
     },
     createdAt: '2024-01-01T00:00:00Z',
   },
@@ -219,21 +362,21 @@ export const BUILTIN_PRESETS: ColorStylePreset[] = [
   // Toning uses sub-unity contrast (0.88) for a flat, faded look with
   // crushed highlights, heavily lifted shadows, and raised blacks.
   {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'color_style',
     name: 'Vintage Film',
     calibration: {
-      red:   { hueShift: -3,  saturation: -15 },
+      red: { hueShift: -3, saturation: -15 },
       green: { hueShift: -10, saturation: -20 },
-      blue:  { hueShift:  5,  saturation: -10 },
+      blue: { hueShift: 5, saturation: -10 },
     },
     toning: {
-      exposure:   0.05,
-      contrast:   0.88,
-      highlights:-0.18,
-      shadows:    0.20,
-      whites:    -0.10,
-      blacks:     0.15,
+      exposure: 0.05,
+      contrast: 0.88,
+      highlights: -0.18,
+      shadows: 0.20,
+      whites: -0.10,
+      blacks: 0.15,
     },
     createdAt: '2024-01-01T00:00:00Z',
   },
@@ -248,21 +391,21 @@ export const BUILTIN_PRESETS: ColorStylePreset[] = [
   // Toning adds punchier contrast (1.15) with subtly crushed shadows/blacks
   // for a dramatic, high-contrast cinematic feel.
   {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'color_style',
     name: 'Cinematic Teal & Orange',
     calibration: {
-      red:   { hueShift: -8,  saturation:  10 },
-      green: { hueShift:  10, saturation: -15 },
-      blue:  { hueShift: -15, saturation:  10 },
+      red: { hueShift: -8, saturation: 10 },
+      green: { hueShift: 10, saturation: -15 },
+      blue: { hueShift: -15, saturation: 10 },
     },
     toning: {
-      exposure:   0,
-      contrast:   1.15,
-      highlights:-0.05,
-      shadows:   -0.10,
-      whites:    -0.08,
-      blacks:    -0.05,
+      exposure: 0,
+      contrast: 1.15,
+      highlights: -0.05,
+      shadows: -0.10,
+      whites: -0.08,
+      blacks: -0.05,
     },
     createdAt: '2024-01-01T00:00:00Z',
   },
@@ -271,7 +414,7 @@ export const BUILTIN_PRESETS: ColorStylePreset[] = [
   // Neutral reference: sRGB / Rec. 709 primaries with no toning adjustments.
   // Useful as a baseline reset.
   {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'color_style',
     name: 'Standard sRGB',
     calibration: { ...DEFAULT_CALIBRATION },
@@ -288,21 +431,21 @@ export const BUILTIN_PRESETS: ColorStylePreset[] = [
   // soft roll-off, raises highlights and shadows for an airy, open feel
   // with slightly lifted blacks to avoid harsh shadows.
   {
-    version: '2.0',
+    version: PRESET_SCHEMA_VERSION,
     type: 'color_style',
     name: 'Portrait Soft',
     calibration: {
-      red:   { hueShift: -3, saturation: -5 },
-      green: { hueShift:  0, saturation: -8 },
-      blue:  { hueShift: -5, saturation: -5 },
+      red: { hueShift: -3, saturation: -5 },
+      green: { hueShift: 0, saturation: -8 },
+      blue: { hueShift: -5, saturation: -5 },
     },
     toning: {
-      exposure:   0.10,
-      contrast:   0.95,
+      exposure: 0.10,
+      contrast: 0.95,
       highlights: 0.12,
-      shadows:    0.08,
-      whites:     0.05,
-      blacks:     0.03,
+      shadows: 0.08,
+      whites: 0.05,
+      blacks: 0.03,
     },
     createdAt: '2024-01-01T00:00:00Z',
   },
@@ -319,10 +462,7 @@ export function exportPresetAsJSON(preset: Preset): string {
 export function importPresetFromJSON(json: string): Preset | null {
   try {
     const data = JSON.parse(json);
-    if (data.version && data.type && data.name) {
-      return data as Preset;
-    }
-    return null;
+    return normalizePreset(data);
   } catch {
     return null;
   }
