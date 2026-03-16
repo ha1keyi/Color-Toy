@@ -1,0 +1,12 @@
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+
+/sw.js
+  Service-Worker-Allowed: /
+  Content-Type: text/javascript; charset=utf-8
+
+/icons/*
+  Content-Type: image/svg+xml
+
+/screenshots/*
+  Content-Type: image/svg+xml

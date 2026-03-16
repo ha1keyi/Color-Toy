@@ -9,6 +9,21 @@
   "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0a0a0a",
   "theme_color": "#0d0d14",
+  "screenshots": [
+    {
+      "src": "/screenshots/preview-desktop-wide.svg",
+      "sizes": "1280x720",
+      "type": "image/svg+xml",
+      "label": "Desktop preview",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshots/preview-mobile.svg",
+      "sizes": "375x812",
+      "type": "image/svg+xml",
+      "label": "Mobile preview"
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.svg",
@@ -21,6 +36,13 @@
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    }
+  ]
+  ,
+  "protocol_handlers": [
+    {
+      "protocol": "web+colortoy",
+      "url": "/?colortoy=%s"
     }
   ]
 }

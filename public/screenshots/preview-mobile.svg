@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 812">
+  <rect width="100%" height="100%" fill="#0a0a0a"/>
+  <g transform="translate(12,28)">
+    <rect width="351" height="756" rx="28" fill="#071018" stroke="#142033"/>
+    <rect x="18" y="24" width="315" height="96" rx="8" fill="#0d1116"/>
+    <text x="32" y="156" fill="#cbd5e1" font-size="14" font-family="Arial, Helvetica, sans-serif">Color Toy — Mobile preview</text>
+    <rect x="18" y="180" width="315" height="220" rx="8" fill="#0b1220"/>
+    <rect x="18" y="412" width="315" height="320" rx="8" fill="#071018"/>
+  </g>
+</svg>
