@@ -8,5 +8,9 @@
 /icons/*
   Content-Type: image/svg+xml
 
+/icons/*.png
+  Content-Type: image/png
+
 /screenshots/*
+  Content-Type: image/png
   Content-Type: image/svg+xml
