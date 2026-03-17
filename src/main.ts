@@ -29,6 +29,8 @@ let dominantImageHues: number[] = [];
 type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'colorToy.theme';
 type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
+type UiLayoutMode = 'balanced' | 'image-first' | 'controls-first';
+type UiDensityMode = 'comfortable' | 'compact' | 'tight';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -61,6 +63,9 @@ let wheelRenderPending = false;
 let histogramRenderPending = false;
 let lastHistogramRenderTime = 0;
 let _deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
+const UI_LAYOUT_STORAGE_KEY = 'colorToy.ui.layout';
+const UI_DENSITY_STORAGE_KEY = 'colorToy.ui.density';
+const MODULE_COLLAPSE_STORAGE_PREFIX = 'colorToy.ui.collapsed.';
 
 function isCoarsePointerDevice(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
@@ -258,6 +263,8 @@ function init(): void {
   setupSplitDivider();
   setupCompareHint();
   setupPanels();
+  setupModuleCollapse();
+  setupLayoutControls();
   setupPresets();
   setupExport();
   setupKeyboard();
@@ -994,6 +1001,94 @@ function setupPanels(): void {
   setupToneCurveControls();
   setupMappingControls();
   setupColorPickerPrecisionControls();
+}
+
+function applyLayoutMode(mode: UiLayoutMode): void {
+  document.documentElement.setAttribute('data-ui-layout', mode);
+}
+
+function applyDensityMode(mode: UiDensityMode): void {
+  document.documentElement.setAttribute('data-ui-density', mode);
+}
+
+function setupLayoutControls(): void {
+  const layoutSelect = document.getElementById('ui-layout-select') as HTMLSelectElement | null;
+  const densitySelect = document.getElementById('ui-density-select') as HTMLSelectElement | null;
+
+  const isValidLayout = (value: string): value is UiLayoutMode => (
+    value === 'balanced' || value === 'image-first' || value === 'controls-first'
+  );
+  const isValidDensity = (value: string): value is UiDensityMode => (
+    value === 'comfortable' || value === 'compact' || value === 'tight'
+  );
+
+  const layoutStored = window.localStorage.getItem(UI_LAYOUT_STORAGE_KEY);
+  const densityStored = window.localStorage.getItem(UI_DENSITY_STORAGE_KEY);
+
+  const initialLayout: UiLayoutMode = isValidLayout(layoutStored || '')
+    ? layoutStored as UiLayoutMode
+    : 'balanced';
+  const initialDensity: UiDensityMode = isValidDensity(densityStored || '')
+    ? densityStored as UiDensityMode
+    : 'compact';
+
+  applyLayoutMode(initialLayout);
+  applyDensityMode(initialDensity);
+
+  if (layoutSelect) {
+    layoutSelect.value = initialLayout;
+    layoutSelect.addEventListener('change', () => {
+      const selected = isValidLayout(layoutSelect.value) ? layoutSelect.value : 'balanced';
+      window.localStorage.setItem(UI_LAYOUT_STORAGE_KEY, selected);
+      applyLayoutMode(selected);
+      handleResize();
+    });
+  }
+
+  if (densitySelect) {
+    densitySelect.value = initialDensity;
+    densitySelect.addEventListener('change', () => {
+      const selected = isValidDensity(densitySelect.value) ? densitySelect.value : 'compact';
+      window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, selected);
+      applyDensityMode(selected);
+      handleResize();
+    });
+  }
+}
+
+function setupModuleCollapse(): void {
+  const buttons = Array.from(document.querySelectorAll('.module-collapse-btn')) as HTMLButtonElement[];
+  for (const button of buttons) {
+    const targetId = button.dataset.collapseTarget;
+    if (!targetId) continue;
+
+    const target = document.getElementById(targetId);
+    if (!target) continue;
+
+    const isHistory = targetId === 'history-panel';
+    const defaultCollapsed = isHistory && isCoarsePointerDevice();
+    const storageKey = MODULE_COLLAPSE_STORAGE_PREFIX + targetId;
+    const stored = window.localStorage.getItem(storageKey);
+    let collapsed = stored === null ? defaultCollapsed : stored === '1';
+
+    const apply = () => {
+      target.classList.toggle('is-collapsed', collapsed);
+      button.classList.toggle('is-collapsed', collapsed);
+      button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      button.title = collapsed ? 'Expand module' : 'Collapse module';
+      button.textContent = collapsed ? '▸' : '▾';
+    };
+
+    apply();
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      collapsed = !collapsed;
+      window.localStorage.setItem(storageKey, collapsed ? '1' : '0');
+      apply();
+      handleResize();
+    });
+  }
 }
 
 function setupColorManagementControls(): void {

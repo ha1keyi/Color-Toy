@@ -77,6 +77,25 @@
 
     <!-- Controls Sidebar -->
     <div id="controls">
+      <div id="layout-controls" class="layout-controls" aria-label="Layout Preferences">
+        <label class="layout-control-item" for="ui-layout-select">
+          <span>Layout</span>
+          <select id="ui-layout-select">
+            <option value="balanced">Balanced</option>
+            <option value="image-first">Image Priority</option>
+            <option value="controls-first">Controls Priority</option>
+          </select>
+        </label>
+        <label class="layout-control-item" for="ui-density-select">
+          <span>Density</span>
+          <select id="ui-density-select">
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
+            <option value="tight">Tight</option>
+          </select>
+        </label>
+      </div>
+
       <!-- Toolbar -->
       <div id="toolbar">
         <button id="hold-compare-btn" class="tool-btn" title="Hold to compare with original image">
@@ -134,7 +153,12 @@
       <section id="history-panel" aria-label="Edit History">
         <div class="history-panel-header">
           <h3 class="history-panel-title">History</h3>
-          <span id="history-panel-status" class="history-panel-status">0 / 0</span>
+          <div class="history-panel-actions">
+            <span id="history-panel-status" class="history-panel-status">0 / 0</span>
+            <button id="history-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+              data-collapse-target="history-panel"
+              aria-controls="history-list" title="Collapse history">▾</button>
+          </div>
         </div>
         <div id="history-list" class="history-list"></div>
       </section>
@@ -145,12 +169,17 @@
         <div id="calibration-panel" class="panel" style="display:none">
           <div class="panel-header">
             <h3 class="panel-title">Calibration</h3>
-            <button class="reset-module-btn" data-module="calibration" title="Reset Calibration">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 4v6h6" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
-            </button>
+            <div class="panel-header-actions">
+              <button id="calibration-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+                data-collapse-target="calibration-panel"
+                aria-controls="calibration-panel" title="Collapse calibration">▾</button>
+              <button class="reset-module-btn" data-module="calibration" title="Reset Calibration">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 4v6h6" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+            </div>
           </div>
           <!-- Red Primary -->
           <div class="cal-channel">
@@ -261,12 +290,17 @@
         <div id="mapping-panel" class="panel" style="display:none">
           <div class="panel-header">
             <h3 class="panel-title">Hue Mapping</h3>
-            <button class="reset-module-btn" data-module="mapping" title="Reset Hue Mapping">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 4v6h6" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
-            </button>
+            <div class="panel-header-actions">
+              <button id="mapping-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+                data-collapse-target="mapping-panel"
+                aria-controls="mapping-panel" title="Collapse hue mapping">▾</button>
+              <button class="reset-module-btn" data-module="mapping" title="Reset Hue Mapping">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 4v6h6" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+            </div>
           </div>
           <div class="slider-row">
             <label>Global Hue</label>
@@ -315,12 +349,17 @@
         <div id="toning-panel" class="panel">
           <div class="panel-header">
             <h3 class="panel-title">Toning</h3>
-            <button class="reset-module-btn" data-module="toning" title="Reset Toning">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 4v6h6" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
-            </button>
+            <div class="panel-header-actions">
+              <button id="toning-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+                data-collapse-target="toning-panel"
+                aria-controls="toning-panel" title="Collapse toning">▾</button>
+              <button class="reset-module-btn" data-module="toning" title="Reset Toning">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 4v6h6" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+            </div>
           </div>
           <!-- Histogram -->
           <div id="histogram-container">
