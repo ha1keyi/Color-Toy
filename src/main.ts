@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Color Toy - Main Application Entry Point
  * Wires together: State, Renderer, ColorWheel (edit + rendered), UI Panels
  */
@@ -1029,6 +1029,10 @@ function getCurrentLayoutMode(): UiLayoutMode {
     : 'controls-priority';
 }
 
+function isWheelStickyContext(): boolean {
+  return isImagePriorityMobileMode() && _mobileModuleSelection !== 'none';
+}
+
 function clampPreviewRatio(value: number): number {
   return Math.max(0.38, Math.min(0.84, value));
 }
@@ -1078,6 +1082,17 @@ function setupLayoutControls(): void {
       const selected: UiLayoutMode = current === 'controls-priority' ? 'image-priority' : 'controls-priority';
       window.localStorage.setItem(UI_LAYOUT_STORAGE_KEY, selected);
       applyLayoutMode(selected);
+      if (selected === 'controls-priority') {
+        const state = store.getState();
+        if (state.ui.wheelPinned) {
+          store.update({
+            ui: {
+              ...state.ui,
+              wheelPinned: false,
+            },
+          });
+        }
+      }
       updateLayoutButton(selected);
       updatePanelUI(store.getState());
       handleResize();
@@ -1092,10 +1107,11 @@ function setupWheelControls(): void {
   if (pinBtn) {
     pinBtn.addEventListener('click', () => {
       const state = store.getState();
+      const stickyContext = isWheelStickyContext();
       store.update({
         ui: {
           ...state.ui,
-          wheelPinned: !state.ui.wheelPinned,
+          wheelPinned: stickyContext ? !state.ui.wheelPinned : false,
         },
       });
       handleResize();
@@ -1229,6 +1245,18 @@ function setupMobileModuleBar(): void {
         });
       }
 
+      if (_mobileModuleSelection === 'none') {
+        const state = store.getState();
+        if (state.ui.wheelPinned) {
+          store.update({
+            ui: {
+              ...state.ui,
+              wheelPinned: false,
+            },
+          });
+        }
+      }
+
       applySelectionUI();
       updatePanelUI(store.getState());
       handleResize();
@@ -1261,7 +1289,7 @@ function setupModuleCollapse(): void {
       button.classList.toggle('is-collapsed', collapsed);
       button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       button.title = collapsed ? 'Expand module' : 'Collapse module';
-      button.textContent = collapsed ? '▸' : '▾';
+      button.textContent = collapsed ? '>' : 'v';
     };
 
     apply();
@@ -2746,14 +2774,21 @@ function updatePanelUI(state: AppState): void {
   if (wheelsRow) wheelsRow.style.display = state.ui.activeLayer === 'toning' ? 'none' : 'flex';
 
   const imagePriorityMobile = isImagePriorityMobileMode();
+  const stickyContext = imagePriorityMobile && _mobileModuleSelection !== 'none';
+  const wheelRowPinned = stickyContext && state.ui.wheelPinned;
   if (mobileBar) {
     mobileBar.classList.toggle('active', imagePriorityMobile);
   }
 
   if (controls) {
     controls.classList.toggle('image-priority-mode', imagePriorityMobile);
-    controls.classList.toggle('module-open', imagePriorityMobile && _mobileModuleSelection !== 'none');
-    controls.classList.toggle('wheel-pinned', state.ui.wheelPinned);
+    controls.classList.toggle('module-open', stickyContext);
+    controls.classList.toggle('wheel-sticky-context', stickyContext);
+    controls.classList.toggle('wheel-pinned', wheelRowPinned);
+    const wheelControlsBar = document.getElementById('wheel-controls-bar') as HTMLElement | null;
+    if (wheelControlsBar) {
+      controls.style.setProperty('--wheel-controls-sticky-offset', wheelControlsBar.offsetHeight + 'px');
+    }
   }
 
   if (imagePriorityMobile) {
@@ -2817,8 +2852,12 @@ function updatePanelUI(state: AppState): void {
 
   const wheelPinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
   if (wheelPinBtn) {
-    wheelPinBtn.classList.toggle('active', state.ui.wheelPinned);
-    wheelPinBtn.textContent = state.ui.wheelPinned ? 'Pin: On' : 'Pin: Off';
+    wheelPinBtn.classList.toggle('active', wheelRowPinned);
+    wheelPinBtn.textContent = wheelRowPinned ? 'Pin: On' : 'Pin: Off';
+    wheelPinBtn.disabled = !stickyContext;
+    wheelPinBtn.title = stickyContext
+      ? 'Pin wheel area while scrolling'
+      : 'Pin is available in image-priority mode with an opened module';
   }
 
   const wheelCollapseBtn = document.getElementById('wheel-collapse-btn') as HTMLButtonElement | null;
@@ -3058,3 +3097,6 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
+
+
