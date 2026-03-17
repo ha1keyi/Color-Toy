@@ -14,7 +14,8 @@
         "format:check": "prettier . --check",
         "test": "vitest",
         "test:run": "vitest run",
-        "check": "npm run typecheck && npm run lint && npm run test:run && npm run build"
+        "check": "npm run typecheck && npm run lint && npm run test:run && npm run build",
+        "icons:gen": "node ./scripts/generate-icons.js"
     },
     "devDependencies": {
         "@eslint/js": "^9.22.0",
@@ -26,9 +27,5 @@
         "typescript-eslint": "^8.26.1",
         "vite": "^5.4.0",
         "vitest": "^3.0.8"
-    }
-    ,
-    "scripts": {
-        "icons:gen": "node ./scripts/generate-icons.js"
     }
 }
