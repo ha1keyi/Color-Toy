@@ -29,8 +29,8 @@ let dominantImageHues: number[] = [];
 type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'colorToy.theme';
 type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
-type UiLayoutMode = 'balanced' | 'image-first' | 'controls-first';
-type UiDensityMode = 'comfortable' | 'compact' | 'tight';
+type UiLayoutMode = 'image-priority' | 'controls-priority';
+type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -64,8 +64,8 @@ let histogramRenderPending = false;
 let lastHistogramRenderTime = 0;
 let _deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 const UI_LAYOUT_STORAGE_KEY = 'colorToy.ui.layout';
-const UI_DENSITY_STORAGE_KEY = 'colorToy.ui.density';
 const MODULE_COLLAPSE_STORAGE_PREFIX = 'colorToy.ui.collapsed.';
+let _mobileModuleSelection: MobileModule = 'none';
 
 function isCoarsePointerDevice(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
@@ -265,6 +265,7 @@ function init(): void {
   setupPanels();
   setupModuleCollapse();
   setupLayoutControls();
+  setupMobileModuleBar();
   setupPresets();
   setupExport();
   setupKeyboard();
@@ -284,6 +285,7 @@ function init(): void {
   colorWheel.setImageHuePeaks(dominantImageHues);
   colorWheel.setState(state);
   requestUiRender('all');
+  updatePanelUI(state);
 
   // Initial diagram renders
   if (state.ui.activeLayer === 'calibration') drawXYDiagram(state);
@@ -1005,55 +1007,85 @@ function setupPanels(): void {
 
 function applyLayoutMode(mode: UiLayoutMode): void {
   document.documentElement.setAttribute('data-ui-layout', mode);
+  if (mode === 'controls-priority') {
+    _mobileModuleSelection = 'none';
+  }
 }
 
-function applyDensityMode(mode: UiDensityMode): void {
-  document.documentElement.setAttribute('data-ui-density', mode);
+function isMobileCompactViewport(): boolean {
+  return window.matchMedia('(max-width: 767px)').matches;
+}
+
+function isImagePriorityMobileMode(): boolean {
+  return document.documentElement.getAttribute('data-ui-layout') === 'image-priority' && isMobileCompactViewport();
 }
 
 function setupLayoutControls(): void {
   const layoutSelect = document.getElementById('ui-layout-select') as HTMLSelectElement | null;
-  const densitySelect = document.getElementById('ui-density-select') as HTMLSelectElement | null;
 
   const isValidLayout = (value: string): value is UiLayoutMode => (
-    value === 'balanced' || value === 'image-first' || value === 'controls-first'
-  );
-  const isValidDensity = (value: string): value is UiDensityMode => (
-    value === 'comfortable' || value === 'compact' || value === 'tight'
+    value === 'image-priority' || value === 'controls-priority'
   );
 
   const layoutStored = window.localStorage.getItem(UI_LAYOUT_STORAGE_KEY);
-  const densityStored = window.localStorage.getItem(UI_DENSITY_STORAGE_KEY);
 
   const initialLayout: UiLayoutMode = isValidLayout(layoutStored || '')
     ? layoutStored as UiLayoutMode
-    : 'balanced';
-  const initialDensity: UiDensityMode = isValidDensity(densityStored || '')
-    ? densityStored as UiDensityMode
-    : 'compact';
+    : 'controls-priority';
 
   applyLayoutMode(initialLayout);
-  applyDensityMode(initialDensity);
 
   if (layoutSelect) {
     layoutSelect.value = initialLayout;
     layoutSelect.addEventListener('change', () => {
-      const selected = isValidLayout(layoutSelect.value) ? layoutSelect.value : 'balanced';
+      const selected = isValidLayout(layoutSelect.value) ? layoutSelect.value : 'controls-priority';
       window.localStorage.setItem(UI_LAYOUT_STORAGE_KEY, selected);
       applyLayoutMode(selected);
+      updatePanelUI(store.getState());
       handleResize();
     });
   }
+}
 
-  if (densitySelect) {
-    densitySelect.value = initialDensity;
-    densitySelect.addEventListener('change', () => {
-      const selected = isValidDensity(densitySelect.value) ? densitySelect.value : 'compact';
-      window.localStorage.setItem(UI_DENSITY_STORAGE_KEY, selected);
-      applyDensityMode(selected);
+function setupMobileModuleBar(): void {
+  const buttons = Array.from(document.querySelectorAll('.mobile-module-btn')) as HTMLButtonElement[];
+  const isValidModule = (value: string): value is MobileModule => (
+    value === 'none' || value === 'calibration' || value === 'mapping' || value === 'toning' || value === 'history'
+  );
+
+  const applySelectionUI = () => {
+    buttons.forEach((btn) => {
+      const moduleName = btn.dataset.mobileModule as MobileModule | undefined;
+      btn.classList.toggle('active', moduleName === _mobileModuleSelection);
+    });
+  };
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const next = button.dataset.mobileModule || 'none';
+      if (!isValidModule(next)) return;
+
+      _mobileModuleSelection = next;
+      if (next === 'calibration' || next === 'mapping' || next === 'toning') {
+        const state = store.getState();
+        store.update({
+          ui: {
+            ...state.ui,
+            activeLayer: next,
+          },
+        });
+      }
+
+      applySelectionUI();
+      updatePanelUI(store.getState());
       handleResize();
     });
-  }
+  });
+
+  applySelectionUI();
+  window.addEventListener('resize', () => {
+    updatePanelUI(store.getState());
+  });
 }
 
 function setupModuleCollapse(): void {
@@ -2545,6 +2577,10 @@ function updatePanelUI(state: AppState): void {
   const mappingPanel = document.getElementById('mapping-panel');
   const toningPanel = document.getElementById('toning-panel');
   const wheelsRow = document.getElementById('wheels-row');
+  const historyPanel = document.getElementById('history-panel');
+  const panels = document.getElementById('panels');
+  const controls = document.getElementById('controls');
+  const mobileBar = document.getElementById('mobile-module-bar');
 
   if (calibrationPanel) calibrationPanel.style.display = state.ui.activeLayer === 'calibration' ? 'block' : 'none';
   if (mappingPanel) mappingPanel.style.display = state.ui.activeLayer === 'mapping' ? 'block' : 'none';
@@ -2552,6 +2588,38 @@ function updatePanelUI(state: AppState): void {
 
   // Wheels only shown for calibration and hue map.
   if (wheelsRow) wheelsRow.style.display = state.ui.activeLayer === 'toning' ? 'none' : 'flex';
+
+  const imagePriorityMobile = isImagePriorityMobileMode();
+  if (mobileBar) {
+    mobileBar.classList.toggle('active', imagePriorityMobile);
+  }
+
+  if (controls) {
+    controls.classList.toggle('image-priority-mode', imagePriorityMobile);
+    controls.classList.toggle('module-open', imagePriorityMobile && _mobileModuleSelection !== 'none');
+  }
+
+  if (imagePriorityMobile) {
+    if (historyPanel) {
+      historyPanel.style.display = _mobileModuleSelection === 'history' ? 'block' : 'none';
+    }
+
+    const layerSelection = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning';
+    if (panels) {
+      panels.style.display = layerSelection ? 'block' : 'none';
+    }
+
+    if (calibrationPanel) calibrationPanel.style.display = _mobileModuleSelection === 'calibration' ? 'block' : 'none';
+    if (mappingPanel) mappingPanel.style.display = _mobileModuleSelection === 'mapping' ? 'block' : 'none';
+    if (toningPanel) toningPanel.style.display = _mobileModuleSelection === 'toning' ? 'block' : 'none';
+
+    if (wheelsRow) {
+      wheelsRow.style.display = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' ? 'flex' : 'none';
+    }
+  } else {
+    if (historyPanel) historyPanel.style.display = 'block';
+    if (panels) panels.style.display = 'block';
+  }
 
   const splitBtn = document.getElementById('split-btn');
   if (splitBtn) splitBtn.classList.toggle('active', state.ui.splitView);

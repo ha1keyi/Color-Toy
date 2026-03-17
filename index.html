@@ -81,17 +81,8 @@
         <label class="layout-control-item" for="ui-layout-select">
           <span>Layout</span>
           <select id="ui-layout-select">
-            <option value="balanced">Balanced</option>
-            <option value="image-first">Image Priority</option>
-            <option value="controls-first">Controls Priority</option>
-          </select>
-        </label>
-        <label class="layout-control-item" for="ui-density-select">
-          <span>Density</span>
-          <select id="ui-density-select">
-            <option value="comfortable">Comfortable</option>
-            <option value="compact">Compact</option>
-            <option value="tight">Tight</option>
+            <option value="controls-priority">Controls Priority</option>
+            <option value="image-priority">Image Priority</option>
           </select>
         </label>
       </div>
@@ -421,6 +412,14 @@
         </div>
       </div>
     </div>
+
+    <nav id="mobile-module-bar" aria-label="Mobile Operations" class="mobile-module-bar">
+      <button class="mobile-module-btn" data-mobile-module="calibration" type="button">Calibration</button>
+      <button class="mobile-module-btn" data-mobile-module="mapping" type="button">Hue Map</button>
+      <button class="mobile-module-btn" data-mobile-module="toning" type="button">Toning</button>
+      <button class="mobile-module-btn" data-mobile-module="history" type="button">History</button>
+      <button class="mobile-module-btn" data-mobile-module="none" type="button">Hide</button>
+    </nav>
 
     <!-- Bottom Bar -->
     <div id="bottom-bar">
