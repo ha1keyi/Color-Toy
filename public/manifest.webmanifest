@@ -11,17 +11,30 @@
   "theme_color": "#0d0d14",
   "screenshots": [
     {
-      "src": "/screenshots/preview-desktop-wide.svg",
-      "sizes": "1280x720",
-      "type": "image/svg+xml",
-      "label": "Desktop preview",
+      "src": "/screenshots/desktop-1.png",
+      "sizes": "1365x768",
+      "type": "image/png",
+      "label": "Desktop preview — dark",
       "form_factor": "wide"
     },
     {
-      "src": "/screenshots/preview-mobile.svg",
-      "sizes": "375x812",
-      "type": "image/svg+xml",
-      "label": "Mobile preview"
+      "src": "/screenshots/desktop-2.png",
+      "sizes": "1365x768",
+      "type": "image/png",
+      "label": "Desktop preview — light",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshots/mobile-1.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "label": "Mobile preview — light"
+    },
+    {
+      "src": "/screenshots/mobile-2.png",
+      "sizes": "360x800",
+      "type": "image/png",
+      "label": "Mobile preview — dark"
     }
   ],
   "icons": [
@@ -35,6 +48,18 @@
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ]
