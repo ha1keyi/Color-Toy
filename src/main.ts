@@ -30,7 +30,7 @@ type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'colorToy.theme';
 type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
 type UiLayoutMode = 'image-priority' | 'controls-priority';
-type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history';
+type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history' | 'presets';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -65,6 +65,7 @@ let lastHistogramRenderTime = 0;
 let _deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 const UI_LAYOUT_STORAGE_KEY = 'colorToy.ui.layout';
 const MODULE_COLLAPSE_STORAGE_PREFIX = 'colorToy.ui.collapsed.';
+const PREVIEW_SPLIT_STORAGE_PREFIX = 'colorToy.ui.previewSplit.';
 let _mobileModuleSelection: MobileModule = 'none';
 
 function isCoarsePointerDevice(): boolean {
@@ -265,6 +266,8 @@ function init(): void {
   setupPanels();
   setupModuleCollapse();
   setupLayoutControls();
+  setupWheelControls();
+  setupPreviewControlsDivider();
   setupMobileModuleBar();
   setupPresets();
   setupExport();
@@ -1020,12 +1023,29 @@ function isImagePriorityMobileMode(): boolean {
   return document.documentElement.getAttribute('data-ui-layout') === 'image-priority' && isMobileCompactViewport();
 }
 
+function getCurrentLayoutMode(): UiLayoutMode {
+  return document.documentElement.getAttribute('data-ui-layout') === 'image-priority'
+    ? 'image-priority'
+    : 'controls-priority';
+}
+
+function clampPreviewRatio(value: number): number {
+  return Math.max(0.38, Math.min(0.84, value));
+}
+
 function setupLayoutControls(): void {
-  const layoutSelect = document.getElementById('ui-layout-select') as HTMLSelectElement | null;
+  const layoutToggleBtn = document.getElementById('layout-toggle-btn') as HTMLButtonElement | null;
 
   const isValidLayout = (value: string): value is UiLayoutMode => (
     value === 'image-priority' || value === 'controls-priority'
   );
+
+  const updateLayoutButton = (mode: UiLayoutMode) => {
+    if (!layoutToggleBtn) return;
+    layoutToggleBtn.classList.toggle('active', mode === 'image-priority');
+    const label = layoutToggleBtn.querySelector('span') || layoutToggleBtn;
+    label.textContent = mode === 'image-priority' ? 'Layout: Image' : 'Layout: Controls';
+  };
 
   const layoutStored = window.localStorage.getItem(UI_LAYOUT_STORAGE_KEY);
 
@@ -1033,24 +1053,156 @@ function setupLayoutControls(): void {
     ? layoutStored as UiLayoutMode
     : 'controls-priority';
 
+  const controlsStored = parseFloat(window.localStorage.getItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}controls-priority`) || '');
+  const imageStored = parseFloat(window.localStorage.getItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}image-priority`) || '');
+  const state = store.getState();
+  store.update({
+    ui: {
+      ...state.ui,
+      controlsPriorityPreviewRatio: Number.isFinite(controlsStored)
+        ? clampPreviewRatio(controlsStored)
+        : state.ui.controlsPriorityPreviewRatio,
+      imagePriorityPreviewRatio: Number.isFinite(imageStored)
+        ? clampPreviewRatio(imageStored)
+        : state.ui.imagePriorityPreviewRatio,
+    },
+  });
+
   applyLayoutMode(initialLayout);
 
-  if (layoutSelect) {
-    layoutSelect.value = initialLayout;
-    layoutSelect.addEventListener('change', () => {
-      const selected = isValidLayout(layoutSelect.value) ? layoutSelect.value : 'controls-priority';
+  updateLayoutButton(initialLayout);
+
+  if (layoutToggleBtn) {
+    layoutToggleBtn.addEventListener('click', () => {
+      const current = getCurrentLayoutMode();
+      const selected: UiLayoutMode = current === 'controls-priority' ? 'image-priority' : 'controls-priority';
       window.localStorage.setItem(UI_LAYOUT_STORAGE_KEY, selected);
       applyLayoutMode(selected);
+      updateLayoutButton(selected);
       updatePanelUI(store.getState());
       handleResize();
     });
   }
 }
 
+function setupWheelControls(): void {
+  const pinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
+  const collapseBtn = document.getElementById('wheel-collapse-btn') as HTMLButtonElement | null;
+
+  if (pinBtn) {
+    pinBtn.addEventListener('click', () => {
+      const state = store.getState();
+      store.update({
+        ui: {
+          ...state.ui,
+          wheelPinned: !state.ui.wheelPinned,
+        },
+      });
+      handleResize();
+    });
+  }
+
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', () => {
+      const state = store.getState();
+      store.update({
+        ui: {
+          ...state.ui,
+          wheelCollapsed: !state.ui.wheelCollapsed,
+        },
+      });
+      handleResize();
+    });
+  }
+}
+
+function applyPreviewControlsSplit(state: AppState): void {
+  const app = document.getElementById('app') as HTMLElement | null;
+  const divider = document.getElementById('preview-controls-divider') as HTMLElement | null;
+  if (!app || !divider) return;
+
+  if (!isMobileCompactViewport()) {
+    app.style.removeProperty('--preview-controls-ratio');
+    app.style.removeProperty('--controls-flex-ratio');
+    divider.classList.remove('active');
+    return;
+  }
+
+  const layoutMode = getCurrentLayoutMode();
+  const storedRatio = layoutMode === 'image-priority'
+    ? state.ui.imagePriorityPreviewRatio
+    : state.ui.controlsPriorityPreviewRatio;
+  const expandedRatio = clampPreviewRatio(storedRatio);
+  const collapsedRatio = 0.88;
+  const ratio = (layoutMode === 'image-priority' && _mobileModuleSelection === 'none')
+    ? collapsedRatio
+    : expandedRatio;
+
+  app.style.setProperty('--preview-controls-ratio', ratio.toFixed(4));
+  app.style.setProperty('--controls-flex-ratio', (1 - ratio).toFixed(4));
+  divider.classList.toggle('active', layoutMode === 'image-priority');
+}
+
+function setupPreviewControlsDivider(): void {
+  const divider = document.getElementById('preview-controls-divider') as HTMLElement | null;
+  const preview = document.getElementById('preview-container') as HTMLElement | null;
+  const controls = document.getElementById('controls') as HTMLElement | null;
+  if (!divider || !preview || !controls) return;
+
+  let dragging = false;
+  let activePointerId: number | null = null;
+
+  const updateByClientY = (clientY: number) => {
+    if (!isMobileCompactViewport()) return;
+    const layoutMode = getCurrentLayoutMode();
+    if (layoutMode !== 'image-priority' && layoutMode !== 'controls-priority') return;
+
+    const areaTop = preview.getBoundingClientRect().top;
+    const areaBottom = controls.getBoundingClientRect().bottom;
+    const areaHeight = areaBottom - areaTop;
+    if (areaHeight <= 0) return;
+
+    const nextRatio = clampPreviewRatio((clientY - areaTop) / areaHeight);
+    const state = store.getState();
+    const nextUi = layoutMode === 'image-priority'
+      ? { ...state.ui, imagePriorityPreviewRatio: nextRatio }
+      : { ...state.ui, controlsPriorityPreviewRatio: nextRatio };
+    store.update({ ui: nextUi });
+    window.localStorage.setItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}${layoutMode}`, String(nextRatio));
+  };
+
+  divider.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    dragging = true;
+    activePointerId = e.pointerId;
+    divider.setPointerCapture(e.pointerId);
+    updateByClientY(e.clientY);
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    updateByClientY(e.clientY);
+  });
+
+  const finish = (pointerId?: number) => {
+    if (!dragging) return;
+    if (pointerId !== undefined && activePointerId !== null && pointerId !== activePointerId) return;
+    dragging = false;
+    activePointerId = null;
+    handleResize();
+  };
+
+  window.addEventListener('pointerup', (e) => finish(e.pointerId));
+  window.addEventListener('pointercancel', (e) => finish(e.pointerId));
+  divider.addEventListener('lostpointercapture', () => finish());
+}
+
 function setupMobileModuleBar(): void {
   const buttons = Array.from(document.querySelectorAll('.mobile-module-btn')) as HTMLButtonElement[];
   const isValidModule = (value: string): value is MobileModule => (
-    value === 'none' || value === 'calibration' || value === 'mapping' || value === 'toning' || value === 'history'
+    value === 'none' || value === 'calibration' || value === 'mapping' || value === 'toning' || value === 'history' || value === 'presets'
   );
 
   const applySelectionUI = () => {
@@ -1065,13 +1217,13 @@ function setupMobileModuleBar(): void {
       const next = button.dataset.mobileModule || 'none';
       if (!isValidModule(next)) return;
 
-      _mobileModuleSelection = next;
-      if (next === 'calibration' || next === 'mapping' || next === 'toning') {
+      _mobileModuleSelection = _mobileModuleSelection === next ? 'none' : next;
+      if (_mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning') {
         const state = store.getState();
         store.update({
           ui: {
             ...state.ui,
-            activeLayer: next,
+            activeLayer: _mobileModuleSelection,
           },
         });
       }
@@ -2581,6 +2733,9 @@ function updatePanelUI(state: AppState): void {
   const panels = document.getElementById('panels');
   const controls = document.getElementById('controls');
   const mobileBar = document.getElementById('mobile-module-bar');
+  const bottomBar = document.getElementById('bottom-bar');
+  const presetSection = document.getElementById('preset-section');
+  const capabilities = document.getElementById('capabilities');
 
   if (calibrationPanel) calibrationPanel.style.display = state.ui.activeLayer === 'calibration' ? 'block' : 'none';
   if (mappingPanel) mappingPanel.style.display = state.ui.activeLayer === 'mapping' ? 'block' : 'none';
@@ -2597,6 +2752,7 @@ function updatePanelUI(state: AppState): void {
   if (controls) {
     controls.classList.toggle('image-priority-mode', imagePriorityMobile);
     controls.classList.toggle('module-open', imagePriorityMobile && _mobileModuleSelection !== 'none');
+    controls.classList.toggle('wheel-pinned', state.ui.wheelPinned);
   }
 
   if (imagePriorityMobile) {
@@ -2605,8 +2761,19 @@ function updatePanelUI(state: AppState): void {
     }
 
     const layerSelection = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning';
+    const presetsSelection = _mobileModuleSelection === 'presets';
     if (panels) {
       panels.style.display = layerSelection ? 'block' : 'none';
+    }
+
+    if (bottomBar) {
+      bottomBar.style.display = presetsSelection ? 'block' : 'none';
+    }
+    if (presetSection) {
+      presetSection.style.display = presetsSelection ? 'flex' : 'none';
+    }
+    if (capabilities) {
+      capabilities.style.display = presetsSelection ? 'block' : 'none';
     }
 
     if (calibrationPanel) calibrationPanel.style.display = _mobileModuleSelection === 'calibration' ? 'block' : 'none';
@@ -2614,20 +2781,49 @@ function updatePanelUI(state: AppState): void {
     if (toningPanel) toningPanel.style.display = _mobileModuleSelection === 'toning' ? 'block' : 'none';
 
     if (wheelsRow) {
-      wheelsRow.style.display = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' ? 'flex' : 'none';
+      const shouldShowWheels = (_mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping') && !state.ui.wheelCollapsed;
+      wheelsRow.style.display = shouldShowWheels ? 'flex' : 'none';
     }
   } else {
     if (historyPanel) historyPanel.style.display = 'block';
     if (panels) panels.style.display = 'block';
+    if (bottomBar) bottomBar.style.display = 'block';
+    if (presetSection) presetSection.style.display = 'flex';
+    if (capabilities) capabilities.style.display = 'block';
+  }
+
+  if (wheelsRow && !imagePriorityMobile) {
+    const shouldShowWheels = state.ui.activeLayer !== 'toning' && !state.ui.wheelCollapsed;
+    wheelsRow.style.display = shouldShowWheels ? 'flex' : 'none';
   }
 
   const splitBtn = document.getElementById('split-btn');
   if (splitBtn) splitBtn.classList.toggle('active', state.ui.splitView);
 
+  const layoutToggleBtn = document.getElementById('layout-toggle-btn') as HTMLButtonElement | null;
+  if (layoutToggleBtn) {
+    const layoutMode = getCurrentLayoutMode();
+    layoutToggleBtn.classList.toggle('active', layoutMode === 'image-priority');
+    const label = layoutToggleBtn.querySelector('span') || layoutToggleBtn;
+    label.textContent = layoutMode === 'image-priority' ? 'Layout: Image' : 'Layout: Controls';
+  }
+
   const holdCompareBtn = document.getElementById('hold-compare-btn') as HTMLButtonElement | null;
   if (holdCompareBtn) {
     holdCompareBtn.classList.toggle('active', state.ui.holdCompareActive);
     holdCompareBtn.disabled = !state.imageLoaded;
+  }
+
+  const wheelPinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
+  if (wheelPinBtn) {
+    wheelPinBtn.classList.toggle('active', state.ui.wheelPinned);
+    wheelPinBtn.textContent = state.ui.wheelPinned ? 'Pin: On' : 'Pin: Off';
+  }
+
+  const wheelCollapseBtn = document.getElementById('wheel-collapse-btn') as HTMLButtonElement | null;
+  if (wheelCollapseBtn) {
+    wheelCollapseBtn.classList.toggle('active', state.ui.wheelCollapsed);
+    wheelCollapseBtn.textContent = state.ui.wheelCollapsed ? 'Wheel: Hide' : 'Wheel: Show';
   }
 
   const mappingPickerBtn = document.getElementById('add-mapping-picker-btn') as HTMLButtonElement | null;
@@ -2709,6 +2905,8 @@ function updatePanelUI(state: AppState): void {
     arrow.style.transform = state.ui.showXYPanel ? 'rotate(180deg)' : 'rotate(0deg)';
   }
 
+  applyPreviewControlsSplit(state);
+
   updateSplitDividerUI(state);
 }
 
@@ -2786,6 +2984,7 @@ function updateCapabilitiesDisplay(): void {
 
 function handleResize(): void {
   renderer.setRenderScale(getAdaptiveRenderScale());
+  applyPreviewControlsSplit(store.getState());
   colorWheel.resize();
   const state = store.getState();
   requestUiRender('wheel');

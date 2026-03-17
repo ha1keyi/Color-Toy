@@ -126,6 +126,8 @@ body {
 
 /* ============ Mobile Layout (default) ============ */
 #app {
+  --preview-controls-ratio: 0.5;
+  --controls-flex-ratio: 0.5;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -179,6 +181,29 @@ body {
   z-index: 10;
   box-shadow: var(--shadow-inset);
   isolation: isolate;
+}
+
+#top-control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px calc(12px + env(safe-area-inset-right, 0px)) 6px calc(12px + env(safe-area-inset-left, 0px));
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 9;
+}
+
+.top-global-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.top-global-actions .tool-btn {
+  min-height: 32px;
 }
 
 .header-left,
@@ -340,7 +365,7 @@ body {
 
 /* ============ Preview Area ============ */
 #preview-container {
-  flex: 1 1 0;
+  flex: var(--preview-controls-ratio) 1 0;
   min-height: 120px;
   position: relative;
   background: var(--bg-primary);
@@ -348,6 +373,10 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+}
+
+#preview-controls-divider {
+  display: none;
 }
 
 #gl-canvas {
@@ -451,14 +480,14 @@ body {
 
 /* ============ Controls Sidebar ============ */
 #controls {
-  flex-shrink: 0;
+  flex: var(--controls-flex-ratio) 1 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
   overflow-y: auto;
-  max-height: 55vh;
-  max-height: 55dvh;
+  min-height: 110px;
+  max-height: none;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -543,7 +572,7 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
-  padding: 8px 14px 4px;
+  padding: 0;
 }
 
 .layout-control-item {
@@ -648,6 +677,26 @@ body {
   padding: 0 8px;
 }
 
+#wheel-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px 2px;
+  overflow-x: auto;
+}
+
+#wheel-controls-bar .small-btn {
+  flex: 0 0 auto;
+}
+
+#controls.wheel-pinned #wheels-row {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
 .wheel-compare-wrap {
   display: flex;
   justify-content: center;
@@ -730,6 +779,11 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: none;
+}
+
+#history-panel,
+#panels > .panel {
+  width: calc(100% - 12px);
 }
 
 #history-panel {
@@ -1155,6 +1209,11 @@ body {
   flex-shrink: 0;
   margin-top: 4px;
   transition: all 0.2s ease;
+}
+
+#top-control-bar .tool-btn,
+#top-control-bar .small-btn {
+  min-height: 34px;
 }
 
 .cal-label.red {
@@ -1746,22 +1805,64 @@ body {
     --header-height: 52px;
   }
 
+  #top-control-bar {
+    gap: 6px;
+    padding: 6px calc(10px + env(safe-area-inset-right, 0px)) 6px calc(10px + env(safe-area-inset-left, 0px));
+  }
+
+  .top-global-actions {
+    width: 100%;
+    gap: 5px;
+  }
+
+  .top-global-actions .tool-btn {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 9.5px;
+  }
+
+  #split-btn {
+    min-width: 80px;
+    padding: 4px 8px;
+  }
+
+  #preview-controls-divider.active {
+    display: block;
+    height: 12px;
+    background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%);
+    cursor: row-resize;
+    touch-action: none;
+  }
+
   :root[data-ui-layout='controls-priority'] #controls {
-    max-height: 64dvh;
+    min-height: 34dvh;
   }
 
   :root[data-ui-layout='image-priority'] #controls {
-    max-height: 58dvh;
-    transition: max-height 0.22s ease;
+    min-height: 33dvh;
+    transition: flex 0.22s ease, min-height 0.22s ease;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-open {
+    min-height: 33dvh;
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #toolbar,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #layer-tabs,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheel-controls-bar,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheels-row,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #history-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #panels,
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) .wheel-compare-wrap {
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #bottom-bar {
     display: none !important;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode #layer-tabs {
+    display: none !important;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode #wheel-controls-bar {
+    padding-top: 6px;
   }
 
   .header-title {
@@ -1775,15 +1876,28 @@ body {
 
   #toolbar {
     gap: 6px;
-    padding: 6px 10px;
+    padding: 4px 10px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x proximity;
   }
 
+  #wheel-controls-bar {
+    gap: 4px;
+    padding: 4px 10px 2px;
+  }
+
+  #wheel-controls-bar .small-btn {
+    min-height: 28px;
+    font-size: 9px;
+    padding: 4px 8px;
+  }
+
   .tool-btn {
     flex: 0 0 auto;
     scroll-snap-align: start;
+    min-height: 30px;
+    font-size: 9.5px;
   }
 
   #layer-tabs {
@@ -1813,34 +1927,34 @@ body {
 
   .slider-row label {
     width: 56px;
-    font-size: 10px;
+    font-size: 9.5px;
   }
 
   #wheel-container,
   #rendered-wheel-container {
-    max-width: 144px;
+    max-width: 124px;
   }
 
   :root[data-ui-layout='controls-priority'] #wheel-canvas,
   :root[data-ui-layout='controls-priority'] #rendered-wheel-canvas {
-    touch-action: pan-y pinch-zoom;
+    touch-action: pan-y;
   }
 
   :root[data-ui-layout='image-priority'] #wheel-canvas,
   :root[data-ui-layout='image-priority'] #rendered-wheel-canvas {
-    touch-action: none;
+    touch-action: pan-y;
   }
 
   #wheels-row.wheels-compare-inside {
-    min-height: 192px;
+    min-height: 168px;
   }
 
   #wheels-row.wheels-compare-inside #wheel-container {
-    width: clamp(94px, 28vw, 116px);
+    width: clamp(82px, 24vw, 104px);
   }
 
   #wheels-row.wheels-compare-inside #rendered-wheel-container {
-    width: clamp(146px, 46vw, 184px);
+    width: clamp(126px, 40vw, 164px);
   }
 
   .mobile-module-bar {
@@ -1859,12 +1973,19 @@ body {
     z-index: 35;
   }
 
+  .mobile-module-btn {
+    min-height: 32px;
+    font-size: 8.8px;
+    letter-spacing: 0.3px;
+    padding: 0 4px;
+  }
+
   .mobile-module-bar.active {
     display: grid;
   }
 
   :root[data-ui-layout='image-priority'] #bottom-bar {
-    padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -1876,16 +1997,16 @@ body {
   .primary-btn,
   .module-collapse-btn,
   .layout-control-item select {
-    min-height: 40px;
+    min-height: 34px;
   }
 
   .icon-btn,
   .module-collapse-btn {
-    min-width: 40px;
+    min-width: 34px;
   }
 
   .history-item {
-    min-height: 40px;
+    min-height: 34px;
   }
 }
 
@@ -1893,16 +2014,21 @@ body {
 @media (min-width: 768px) {
   #app {
     display: grid;
-    grid-template-rows: var(--header-height) 1fr auto;
+    grid-template-rows: var(--header-height) auto 1fr auto;
     grid-template-columns: 1fr var(--sidebar-width);
     grid-template-areas:
       "header header"
+      "topbar topbar"
       "preview sidebar"
       "bottom bottom";
   }
 
   #header {
     grid-area: header;
+  }
+
+  #top-control-bar {
+    grid-area: topbar;
   }
 
   #preview-container {

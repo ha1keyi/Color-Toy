@@ -59,6 +59,10 @@ export interface UIState {
   toneCurveBypassPreview: boolean;
   holdCompareActive: boolean;
   holdCompareHintDismissed: boolean;
+  wheelPinned: boolean;
+  wheelCollapsed: boolean;
+  controlsPriorityPreviewRatio: number;
+  imagePriorityPreviewRatio: number;
 }
 
 export interface AppState {
@@ -170,6 +174,10 @@ export function createInitialState(): AppState {
       toneCurveBypassPreview: false,
       holdCompareActive: false,
       holdCompareHintDismissed: false,
+      wheelPinned: false,
+      wheelCollapsed: false,
+      controlsPriorityPreviewRatio: 0.5,
+      imagePriorityPreviewRatio: 2 / 3,
     },
     imageLoaded: false,
   };

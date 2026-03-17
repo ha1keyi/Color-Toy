@@ -657,31 +657,36 @@ export class ColorWheel {
     const { center, innerRadius } = this;
 
     const globalAngle = hueToCanvasAngle(state.globalHueShift);
-    const indicatorR = innerRadius * 0.6;
+    const pointerLen = innerRadius * 0.9;
+    const tipX = center + Math.cos(globalAngle) * pointerLen;
+    const tipY = center + Math.sin(globalAngle) * pointerLen;
+    const tailLen = innerRadius * 0.28;
+    const tailX = center - Math.cos(globalAngle) * tailLen;
+    const tailY = center - Math.sin(globalAngle) * tailLen;
 
-    // Background circle
+    // High-contrast pointer arm
     ctx.beginPath();
-    ctx.arc(center, center, indicatorR, 0, TWO_PI);
-    ctx.fillStyle = 'rgba(60,60,80,0.8)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 1.5;
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(tipX, tipY);
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Direction indicator dot
-    const ix = center + Math.cos(globalAngle) * (indicatorR - 4);
-    const iy = center + Math.sin(globalAngle) * (indicatorR - 4);
+    // Pointer tip
     ctx.beginPath();
-    ctx.arc(ix, iy, 4, 0, TWO_PI);
-    ctx.fillStyle = '#fff';
+    ctx.arc(tipX, tipY, 4.2, 0, TWO_PI);
+    ctx.fillStyle = '#ffffff';
     ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-    // Label
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '9px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('HUE', center, center);
+    // Pivot marker
+    ctx.beginPath();
+    ctx.arc(center, center, 2.6, 0, TWO_PI);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fill();
   }
 
   // -----------------------------------------------------------------------
@@ -730,7 +735,7 @@ export class ColorWheel {
 
       if (state.ui.activeLayer === 'mapping') {
         // Test global hue center
-        if (dist < this.innerRadius * 0.6) {
+        if (dist < this.innerRadius * 0.95) {
           return { type: 'global', id: '' };
         }
 
@@ -805,18 +810,24 @@ export class ColorWheel {
     });
     window.addEventListener('mouseup', onUp);
 
-    // Touch events
+    // Touch events: only block native scroll when we start an actual wheel interaction.
     this.canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
+      if (!this.currentState || e.touches.length === 0) return;
       const pos = getPos(e.touches[0]);
+      const hit = hitTest(pos.x, pos.y, this.currentState);
+      const canAddMapping = this.currentState.ui.activeLayer === 'mapping' && !hit;
+      if (hit || canAddMapping) {
+        e.preventDefault();
+      }
       onDown(pos.x, pos.y);
     }, { passive: false });
     window.addEventListener('touchmove', (e) => {
       if (this.dragging !== 'none') {
+        e.preventDefault();
         const pos = getPos(e.touches[0]);
         onMove(pos.x, pos.y);
       }
-    });
+    }, { passive: false });
     window.addEventListener('touchend', onUp);
   }
 

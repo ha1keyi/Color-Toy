@@ -47,6 +47,31 @@
       </div>
     </header>
 
+    <div id="top-control-bar" aria-label="Top Controls">
+      <div class="top-global-actions">
+        <button id="hold-compare-btn" class="tool-btn" title="Hold to compare with original image">
+          <span>Hold Compare</span>
+        </button>
+        <button id="split-btn" class="tool-btn" title="Before/After Compare">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="12" y1="3" x2="12" y2="21" />
+          </svg>
+          <span>Compare</span>
+        </button>
+        <button id="layout-toggle-btn" class="tool-btn" type="button" title="Toggle layout mode">
+          <span>Layout: Controls</span>
+        </button>
+        <button id="reset-all-btn" class="tool-btn" title="Reset All">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 4v6h6" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
+          <span>Reset All</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Error message -->
     <div id="error-msg" style="display:none"></div>
     <div id="compare-hint" class="compare-hint" style="display:none">
@@ -75,39 +100,10 @@
       </div>
     </div>
 
+    <div id="preview-controls-divider" aria-label="Resize preview and operations" title="Drag to resize image and operation areas"></div>
+
     <!-- Controls Sidebar -->
     <div id="controls">
-      <div id="layout-controls" class="layout-controls" aria-label="Layout Preferences">
-        <label class="layout-control-item" for="ui-layout-select">
-          <span>Layout</span>
-          <select id="ui-layout-select">
-            <option value="controls-priority">Controls Priority</option>
-            <option value="image-priority">Image Priority</option>
-          </select>
-        </label>
-      </div>
-
-      <!-- Toolbar -->
-      <div id="toolbar">
-        <button id="hold-compare-btn" class="tool-btn" title="Hold to compare with original image">
-          <span>Hold Compare</span>
-        </button>
-        <button id="split-btn" class="tool-btn" title="Before/After Compare">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="12" y1="3" x2="12" y2="21" />
-          </svg>
-          <span>Compare</span>
-        </button>
-        <button id="reset-all-btn" class="tool-btn" title="Reset All">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 4v6h6" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-          </svg>
-          <span>Reset All</span>
-        </button>
-      </div>
-
       <!-- Layer Tabs: Calibration (1), Hue Map (2), Toning (3) -->
       <div id="layer-tabs">
         <button class="layer-tab active" data-layer="calibration">
@@ -121,8 +117,10 @@
         </button>
       </div>
 
-      <div class="wheel-compare-wrap">
+      <div id="wheel-controls-bar">
         <button id="wheel-compare-btn" class="small-btn" type="button">Compare: Left/Right</button>
+        <button id="wheel-pin-btn" class="small-btn" type="button">Pin: Off</button>
+        <button id="wheel-collapse-btn" class="small-btn" type="button">Wheel: Show</button>
       </div>
 
       <!-- Dual Wheels Row -->
@@ -418,7 +416,7 @@
       <button class="mobile-module-btn" data-mobile-module="mapping" type="button">Hue Map</button>
       <button class="mobile-module-btn" data-mobile-module="toning" type="button">Toning</button>
       <button class="mobile-module-btn" data-mobile-module="history" type="button">History</button>
-      <button class="mobile-module-btn" data-mobile-module="none" type="button">Hide</button>
+      <button class="mobile-module-btn" data-mobile-module="presets" type="button">Presets</button>
     </nav>
 
     <!-- Bottom Bar -->
