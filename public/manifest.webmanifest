@@ -12,27 +12,27 @@
   "screenshots": [
     {
       "src": "/screenshots/desktop-1.png",
-      "sizes": "1365x768",
+      "sizes": "2549x1403",
       "type": "image/png",
       "label": "Desktop preview — dark",
       "form_factor": "wide"
     },
     {
       "src": "/screenshots/desktop-2.png",
-      "sizes": "1365x768",
+      "sizes": "2549x1403",
       "type": "image/png",
       "label": "Desktop preview — light",
       "form_factor": "wide"
     },
     {
       "src": "/screenshots/mobile-1.png",
-      "sizes": "390x844",
+      "sizes": "585x1266",
       "type": "image/png",
       "label": "Mobile preview — light"
     },
     {
       "src": "/screenshots/mobile-2.png",
-      "sizes": "360x800",
+      "sizes": "579x1263",
       "type": "image/png",
       "label": "Mobile preview — dark"
     }
@@ -42,25 +42,13 @@
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon-192.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon-512.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
   ,
