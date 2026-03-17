@@ -689,12 +689,17 @@ body {
   flex: 0 0 auto;
 }
 
+#controls.wheel-pinned #wheel-controls-bar,
 #controls.wheel-pinned #wheels-row {
   position: sticky;
   top: 0;
   z-index: 6;
   background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
   border-bottom: 1px solid var(--border);
+}
+
+#controls.wheel-pinned #wheels-row {
+  top: 38px;
 }
 
 .wheel-compare-wrap {

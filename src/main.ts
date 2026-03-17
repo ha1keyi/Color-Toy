@@ -1118,8 +1118,9 @@ function setupWheelControls(): void {
 
 function applyPreviewControlsSplit(state: AppState): void {
   const app = document.getElementById('app') as HTMLElement | null;
+  const controls = document.getElementById('controls') as HTMLElement | null;
   const divider = document.getElementById('preview-controls-divider') as HTMLElement | null;
-  if (!app || !divider) return;
+  if (!app || !divider || !controls) return;
 
   if (!isMobileCompactViewport()) {
     app.style.removeProperty('--preview-controls-ratio');
@@ -1129,18 +1130,17 @@ function applyPreviewControlsSplit(state: AppState): void {
   }
 
   const layoutMode = getCurrentLayoutMode();
+  const imagePriorityModuleOpen = layoutMode === 'image-priority' && _mobileModuleSelection !== 'none';
   const storedRatio = layoutMode === 'image-priority'
     ? state.ui.imagePriorityPreviewRatio
     : state.ui.controlsPriorityPreviewRatio;
   const expandedRatio = clampPreviewRatio(storedRatio);
-  const collapsedRatio = 0.88;
-  const ratio = (layoutMode === 'image-priority' && _mobileModuleSelection === 'none')
-    ? collapsedRatio
-    : expandedRatio;
+  const ratio = imagePriorityModuleOpen ? expandedRatio : 1;
 
   app.style.setProperty('--preview-controls-ratio', ratio.toFixed(4));
   app.style.setProperty('--controls-flex-ratio', (1 - ratio).toFixed(4));
-  divider.classList.toggle('active', layoutMode === 'image-priority');
+  controls.classList.toggle('full-preview', !imagePriorityModuleOpen && layoutMode === 'image-priority');
+  divider.classList.toggle('active', imagePriorityModuleOpen);
 }
 
 function setupPreviewControlsDivider(): void {
@@ -1155,7 +1155,8 @@ function setupPreviewControlsDivider(): void {
   const updateByClientY = (clientY: number) => {
     if (!isMobileCompactViewport()) return;
     const layoutMode = getCurrentLayoutMode();
-    if (layoutMode !== 'image-priority' && layoutMode !== 'controls-priority') return;
+    if (layoutMode !== 'image-priority') return;
+    if (_mobileModuleSelection === 'none') return;
 
     const areaTop = preview.getBoundingClientRect().top;
     const areaBottom = controls.getBoundingClientRect().bottom;
