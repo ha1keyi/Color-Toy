@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Color Toy - Main Application Entry Point
  * Wires together: State, Renderer, ColorWheel (edit + rendered), UI Panels
  */
@@ -274,7 +274,6 @@ function init(): void {
   setupKeyboard();
   setupPerformanceMonitor();
   setupWheelCompareToggle();
-  setupXYPanelToggle();
   setupValInputs();
   setupDoubleClickReset();
   setupXYDiagram();
@@ -1102,7 +1101,6 @@ function setupLayoutControls(): void {
 
 function setupWheelControls(): void {
   const pinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
-  const collapseBtn = document.getElementById('wheel-collapse-btn') as HTMLButtonElement | null;
 
   if (pinBtn) {
     pinBtn.addEventListener('click', () => {
@@ -1112,19 +1110,6 @@ function setupWheelControls(): void {
         ui: {
           ...state.ui,
           wheelPinned: stickyContext ? !state.ui.wheelPinned : false,
-        },
-      });
-      handleResize();
-    });
-  }
-
-  if (collapseBtn) {
-    collapseBtn.addEventListener('click', () => {
-      const state = store.getState();
-      store.update({
-        ui: {
-          ...state.ui,
-          wheelCollapsed: !state.ui.wheelCollapsed,
         },
       });
       handleResize();
@@ -1411,35 +1396,6 @@ function setupCalibrationSliders(): void {
         calibration: newCalibration,
         primaries: newPrimaries,
       }, `Adjust ${titleCaseLabel(s.color)} ${s.param === 'hueShift' ? 'Hue' : 'Saturation'}`);
-    });
-  }
-}
-
-// ============ Collapsible XY Panel ============
-
-function setupXYPanelToggle(): void {
-  const toggle = document.getElementById('xy-panel-toggle');
-  const panel = document.getElementById('xy-panel');
-  const arrow = toggle?.querySelector('.xy-toggle-arrow');
-
-  if (toggle && panel) {
-    // Set initial visibility from state
-    const state = store.getState();
-    panel.style.display = state.ui.showXYPanel ? 'block' : 'none';
-    if (arrow) {
-      (arrow as HTMLElement).style.transform = state.ui.showXYPanel ? 'rotate(180deg)' : 'rotate(0deg)';
-    }
-
-    toggle.addEventListener('click', () => {
-      const state = store.getState();
-      const newShow = !state.ui.showXYPanel;
-      store.update({
-        ui: { ...state.ui, showXYPanel: newShow },
-      });
-      panel.style.display = newShow ? 'block' : 'none';
-      if (arrow) {
-        (arrow as HTMLElement).style.transform = newShow ? 'rotate(180deg)' : 'rotate(0deg)';
-      }
     });
   }
 }
@@ -2755,6 +2711,8 @@ function drawHistogram(): void {
 function updatePanelUI(state: AppState): void {
   // Show/hide panels based on active layer
   const calibrationPanel = document.getElementById('calibration-panel');
+  const wheelsPanel = document.getElementById('wheels-panel');
+  const xyPanel = document.getElementById('xy-panel');
   const mappingPanel = document.getElementById('mapping-panel');
   const toningPanel = document.getElementById('toning-panel');
   const wheelsRow = document.getElementById('wheels-row');
@@ -2766,12 +2724,16 @@ function updatePanelUI(state: AppState): void {
   const presetSection = document.getElementById('preset-section');
   const capabilities = document.getElementById('capabilities');
 
-  if (calibrationPanel) calibrationPanel.style.display = state.ui.activeLayer === 'calibration' ? 'block' : 'none';
+  const wheelsAvailableByLayer = state.ui.activeLayer !== 'toning';
+  const calibrationActive = state.ui.activeLayer === 'calibration';
+
+  if (wheelsPanel) wheelsPanel.style.display = wheelsAvailableByLayer ? 'block' : 'none';
+  if (calibrationPanel) calibrationPanel.style.display = calibrationActive ? 'block' : 'none';
+  if (xyPanel) xyPanel.style.display = calibrationActive ? 'block' : 'none';
   if (mappingPanel) mappingPanel.style.display = state.ui.activeLayer === 'mapping' ? 'block' : 'none';
   if (toningPanel) toningPanel.style.display = state.ui.activeLayer === 'toning' ? 'block' : 'none';
 
-  // Wheels only shown for calibration and hue map.
-  if (wheelsRow) wheelsRow.style.display = state.ui.activeLayer === 'toning' ? 'none' : 'flex';
+  if (wheelsRow) wheelsRow.style.display = wheelsAvailableByLayer ? 'flex' : 'none';
 
   const imagePriorityMobile = isImagePriorityMobileMode();
   const stickyContext = imagePriorityMobile && _mobileModuleSelection !== 'none';
@@ -2785,10 +2747,7 @@ function updatePanelUI(state: AppState): void {
     controls.classList.toggle('module-open', stickyContext);
     controls.classList.toggle('wheel-sticky-context', stickyContext);
     controls.classList.toggle('wheel-pinned', wheelRowPinned);
-    const wheelControlsBar = document.getElementById('wheel-controls-bar') as HTMLElement | null;
-    if (wheelControlsBar) {
-      controls.style.setProperty('--wheel-controls-sticky-offset', wheelControlsBar.offsetHeight + 'px');
-    }
+    controls.style.setProperty('--wheel-controls-sticky-offset', '0px');
   }
 
   if (imagePriorityMobile) {
@@ -2812,15 +2771,21 @@ function updatePanelUI(state: AppState): void {
       capabilities.style.display = presetsSelection ? 'block' : 'none';
     }
 
+    if (wheelsPanel) {
+      const wheelsSelection = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping';
+      wheelsPanel.style.display = wheelsSelection ? 'block' : 'none';
+    }
     if (calibrationPanel) calibrationPanel.style.display = _mobileModuleSelection === 'calibration' ? 'block' : 'none';
+    if (xyPanel) xyPanel.style.display = _mobileModuleSelection === 'calibration' ? 'block' : 'none';
     if (mappingPanel) mappingPanel.style.display = _mobileModuleSelection === 'mapping' ? 'block' : 'none';
     if (toningPanel) toningPanel.style.display = _mobileModuleSelection === 'toning' ? 'block' : 'none';
 
     if (wheelsRow) {
-      const shouldShowWheels = (_mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping') && !state.ui.wheelCollapsed;
+      const shouldShowWheels = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping';
       wheelsRow.style.display = shouldShowWheels ? 'flex' : 'none';
     }
   } else {
+    if (wheelsPanel) wheelsPanel.style.display = wheelsAvailableByLayer ? 'block' : 'none';
     if (historyPanel) historyPanel.style.display = 'block';
     if (panels) panels.style.display = 'block';
     if (bottomBar) bottomBar.style.display = 'block';
@@ -2829,7 +2794,7 @@ function updatePanelUI(state: AppState): void {
   }
 
   if (wheelsRow && !imagePriorityMobile) {
-    const shouldShowWheels = state.ui.activeLayer !== 'toning' && !state.ui.wheelCollapsed;
+    const shouldShowWheels = state.ui.activeLayer !== 'toning';
     wheelsRow.style.display = shouldShowWheels ? 'flex' : 'none';
   }
 
@@ -2859,12 +2824,6 @@ function updatePanelUI(state: AppState): void {
     wheelPinBtn.title = stickyContext
       ? 'Pin wheel area while scrolling'
       : 'Pin is available in image-priority mode with an opened module';
-  }
-
-  const wheelCollapseBtn = document.getElementById('wheel-collapse-btn') as HTMLButtonElement | null;
-  if (wheelCollapseBtn) {
-    wheelCollapseBtn.classList.toggle('active', state.ui.wheelCollapsed);
-    wheelCollapseBtn.textContent = state.ui.wheelCollapsed ? 'Wheel: Hide' : 'Wheel: Show';
   }
 
   const mappingPickerBtn = document.getElementById('add-mapping-picker-btn') as HTMLButtonElement | null;
@@ -2935,17 +2894,6 @@ function updatePanelUI(state: AppState): void {
 
   // Update mapping list
   updateMappingList(state);
-
-  // Update xy panel visibility
-  const xyPanel = document.getElementById('xy-panel');
-  const arrow = document.querySelector('.xy-toggle-arrow') as HTMLElement | null;
-  if (xyPanel) {
-    xyPanel.style.display = state.ui.showXYPanel ? 'block' : 'none';
-  }
-  if (arrow) {
-    arrow.style.transform = state.ui.showXYPanel ? 'rotate(180deg)' : 'rotate(0deg)';
-  }
-
   applyPreviewControlsSplit(state);
 
   updateSplitDividerUI(state);

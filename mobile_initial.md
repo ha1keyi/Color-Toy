@@ -1,0 +1,126 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - button "Undo (Ctrl+Z)" [disabled] [ref=e5] [cursor=pointer]:
+        - img [ref=e6]
+      - button "Redo (Ctrl+Shift+Z)" [disabled] [ref=e9] [cursor=pointer]:
+        - img [ref=e10]
+    - heading "Color Toy" [level=1] [ref=e13]
+    - generic [ref=e14]:
+      - button "Switch to light theme" [ref=e15] [cursor=pointer]:
+        - img [ref=e16]
+        - generic [ref=e116]: Dark
+      - button "Export" [ref=e18] [cursor=pointer]
+  - generic "Top Controls" [ref=e19]:
+    - generic [ref=e20]:
+      - button "Hold Compare" [disabled] [ref=e21] [cursor=pointer]:
+        - generic [ref=e117]: Hold Compare
+      - button "Compare" [ref=e22] [cursor=pointer]:
+        - img [ref=e23]
+        - generic [ref=e118]: Compare
+      - 'button "Layout: Controls" [ref=e25] [cursor=pointer]':
+        - generic [ref=e119]: "Layout: Controls"
+      - button "Reset All" [ref=e26] [cursor=pointer]:
+        - img [ref=e27]
+        - generic [ref=e120]: Reset All
+  - generic [ref=e32]:
+    - img [ref=e33]
+    - paragraph [ref=e37]: Drop image here or
+    - button "Choose Image" [ref=e38] [cursor=pointer]
+    - paragraph [ref=e39]: JPG, PNG, WebP
+  - generic [ref=e40]:
+    - generic [ref=e41]:
+      - button "1 Calibration" [ref=e121] [cursor=pointer]:
+        - generic [ref=e122]: "1"
+        - text: Calibration
+      - button "2 Hue Map" [ref=e123] [cursor=pointer]:
+        - generic [ref=e124]: "2"
+        - text: Hue Map
+      - button "3 Toning" [ref=e125] [cursor=pointer]:
+        - generic [ref=e126]: "3"
+        - text: Toning
+    - generic [ref=e45]:
+      - 'button "Compare: Left/Right" [ref=e46] [cursor=pointer]'
+      - 'button "Wheel: Show" [ref=e48] [cursor=pointer]'
+    - generic [ref=e49]:
+      - generic [ref=e51]: Edit
+      - generic [ref=e55]: Result
+    - region "Edit History" [ref=e58]:
+      - generic [ref=e59]:
+        - heading "History" [level=3] [ref=e60]
+        - generic [ref=e61]:
+          - generic [ref=e127]: 1 / 1
+          - button "v" [expanded] [ref=e128] [cursor=pointer]
+      - 'button "Initial State 18:23:19 #1" [ref=e130] [cursor=pointer]':
+        - generic [ref=e131]:
+          - generic [ref=e132]: Initial State
+          - generic [ref=e133]: 18:23:19
+        - generic [ref=e134]: "#1"
+    - generic [ref=e135]:
+      - generic [ref=e136]:
+        - heading "Calibration" [level=3] [ref=e137]
+        - generic [ref=e138]:
+          - button "v" [expanded] [ref=e139] [cursor=pointer]
+          - button "Reset Calibration" [ref=e140] [cursor=pointer]:
+            - img [ref=e141]
+      - generic [ref=e144]:
+        - generic [ref=e145]: R
+        - generic [ref=e146]:
+          - generic [ref=e147]:
+            - generic [ref=e148]: Hue
+            - slider [ref=e149] [cursor=pointer]: "0"
+            - spinbutton [ref=e150]: "0.00"
+          - generic [ref=e151]:
+            - generic [ref=e152]: Saturation
+            - slider [ref=e153] [cursor=pointer]: "0"
+            - spinbutton [ref=e154]: "0.00"
+      - generic [ref=e155]:
+        - generic [ref=e156]: G
+        - generic [ref=e157]:
+          - generic [ref=e158]:
+            - generic [ref=e159]: Hue
+            - slider [ref=e160] [cursor=pointer]: "0"
+            - spinbutton [ref=e161]: "0.00"
+          - generic [ref=e162]:
+            - generic [ref=e163]: Saturation
+            - slider [ref=e164] [cursor=pointer]: "0"
+            - spinbutton [ref=e165]: "0.00"
+      - generic [ref=e166]:
+        - generic [ref=e167]: B
+        - generic [ref=e168]:
+          - generic [ref=e169]:
+            - generic [ref=e170]: Hue
+            - slider [ref=e171] [cursor=pointer]: "0"
+            - spinbutton [ref=e172]: "0.00"
+          - generic [ref=e173]:
+            - generic [ref=e174]: Saturation
+            - slider [ref=e175] [cursor=pointer]: "0"
+            - spinbutton [ref=e176]: "0.00"
+      - generic [ref=e179] [cursor=pointer]:
+        - img [ref=e180]
+        - generic [ref=e182]: xy Chromaticity (Advanced)
+  - generic [ref=e111]:
+    - generic [ref=e112]:
+      - generic [ref=e183]:
+        - button "Warm Autumn Style" [ref=e184] [cursor=pointer]:
+          - generic [ref=e185]: Warm Autumn
+          - generic [ref=e186]: Style
+        - button "Cool Blue Style" [ref=e187] [cursor=pointer]:
+          - generic [ref=e188]: Cool Blue
+          - generic [ref=e189]: Style
+        - button "Vintage Film Style" [ref=e190] [cursor=pointer]:
+          - generic [ref=e191]: Vintage Film
+          - generic [ref=e192]: Style
+        - button "Cinematic Teal & Orange Style" [ref=e193] [cursor=pointer]:
+          - generic [ref=e194]: Cinematic Teal & Orange
+          - generic [ref=e195]: Style
+        - button "Standard sRGB Style" [ref=e196] [cursor=pointer]:
+          - generic [ref=e197]: Standard sRGB
+          - generic [ref=e198]: Style
+        - button "Portrait Soft Style" [ref=e199] [cursor=pointer]:
+          - generic [ref=e200]: Portrait Soft
+          - generic [ref=e201]: Style
+      - generic [ref=e113]:
+        - button "Save Preset" [ref=e114] [cursor=pointer]
+        - button "Import" [ref=e115] [cursor=pointer]
+    - generic [ref=e202]: "WebGL 2.0 | Max mappings: 8"

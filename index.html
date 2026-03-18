@@ -117,28 +117,6 @@
         </button>
       </div>
 
-      <div id="wheel-controls-bar">
-        <button id="wheel-compare-btn" class="small-btn" type="button">Compare: Left/Right</button>
-        <button id="wheel-pin-btn" class="small-btn" type="button">Pin: Off</button>
-        <button id="wheel-collapse-btn" class="small-btn" type="button">Wheel: Show</button>
-      </div>
-
-      <!-- Dual Wheels Row -->
-      <div id="wheels-row">
-        <div class="wheel-col">
-          <div class="wheel-label">Edit</div>
-          <div id="wheel-container">
-            <canvas id="wheel-canvas"></canvas>
-          </div>
-        </div>
-        <div class="wheel-col">
-          <div class="wheel-label">Result</div>
-          <div id="rendered-wheel-container">
-            <canvas id="rendered-wheel-canvas"></canvas>
-          </div>
-        </div>
-      </div>
-
       <section id="history-panel" aria-label="Edit History">
         <div class="history-panel-header">
           <h3 class="history-panel-title">History</h3>
@@ -154,6 +132,34 @@
 
       <!-- Dynamic Panels -->
       <div id="panels">
+        <!-- Wheels Panel -->
+        <div id="wheels-panel" class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Wheels</h3>
+            <div class="panel-header-actions">
+              <button id="wheel-compare-btn" class="small-btn" type="button">Compare: Left/Right</button>
+              <button id="wheel-pin-btn" class="small-btn" type="button">Pin: Off</button>
+              <button id="wheels-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+                data-collapse-target="wheels-panel"
+                aria-controls="wheels-row" title="Collapse wheels">▾</button>
+            </div>
+          </div>
+          <div id="wheels-row">
+            <div class="wheel-col">
+              <div class="wheel-label">Edit</div>
+              <div id="wheel-container">
+                <canvas id="wheel-canvas"></canvas>
+              </div>
+            </div>
+            <div class="wheel-col">
+              <div class="wheel-label">Result</div>
+              <div id="rendered-wheel-container">
+                <canvas id="rendered-wheel-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Calibration Panel -->
         <div id="calibration-panel" class="panel" style="display:none">
           <div class="panel-header">
@@ -219,20 +225,24 @@
             </div>
           </div>
 
-          <!-- xy Chromaticity Diagram -->
+        </div>
+
+        <!-- XY Chromaticity Panel -->
+        <div id="xy-panel" class="panel" style="display:none">
+          <div class="panel-header">
+            <h3 class="panel-title">xy Chromaticity</h3>
+            <div class="panel-header-actions">
+              <button id="xy-panel-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+                data-collapse-target="xy-panel"
+                aria-controls="xy-panel" title="Collapse xy chromaticity">▾</button>
+            </div>
+          </div>
+
           <div id="xy-diagram-container">
             <canvas id="xy-diagram-canvas" width="300" height="300"></canvas>
           </div>
 
-          <!-- Collapsible xy Chromaticity Panel -->
-          <div id="xy-panel-toggle" class="collapsible-toggle">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-              id="xy-toggle-arrow">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-            <span>xy Chromaticity (Advanced)</span>
-          </div>
-          <div id="xy-panel" class="collapsible-content" style="display:none">
+          <div class="xy-panel-content">
             <div class="xy-row">
               <span class="primary-label red">R</span>
               <div class="xy-input-group">

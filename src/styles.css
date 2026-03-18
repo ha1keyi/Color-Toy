@@ -1,10 +1,10 @@
-ï»¿/* Color Toy - Precision Instrument UI
+/* Color Toy - Precision Instrument UI
    Aesthetic: Dark instrument panel, calibrated controls, glass depth */
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  /* Surface palette éˆ¥?pure deep gray */
+  /* Surface palette â€?pure deep gray */
   --bg-primary: #0a0a0a;
   --bg-secondary: #171717;
   --bg-tertiary: #1e1e1e;
@@ -43,7 +43,7 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
 
-  /* Shadows éˆ¥?layered for depth */
+  /* Shadows â€?layered for depth */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.5), 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -674,46 +674,29 @@ body {
   align-items: flex-start;
   gap: 0;
   flex-shrink: 0;
-  padding: 0 8px;
+  padding: 0 4px;
 }
 
-#wheel-controls-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 14px 2px;
-  overflow-x: auto;
+#wheels-panel .panel-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-#wheel-controls-bar .small-btn {
+#wheels-panel .panel-header-actions .small-btn {
   flex: 0 0 auto;
 }
 
-#controls.wheel-sticky-context #wheel-controls-bar {
-  position: sticky;
-  top: 0;
-  z-index: 8;
-  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
-  border-bottom: 1px solid var(--border);
+#wheel-compare-btn {
+  min-width: 150px;
+  text-align: center;
 }
 
-#controls.wheel-pinned #wheels-row {
+#controls.wheel-pinned #wheels-panel {
   position: sticky;
-  top: var(--wheel-controls-sticky-offset, 38px);
+  top: var(--wheel-controls-sticky-offset, 0px);
   z-index: 7;
   background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
   border-bottom: 1px solid var(--border);
-}
-
-.wheel-compare-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 4px 14px 2px;
-}
-
-#wheel-compare-btn {
-  min-width: 180px;
-  text-align: center;
 }
 
 #wheels-row.wheels-compare-swap {
@@ -1865,7 +1848,7 @@ body {
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #toolbar,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #layer-tabs,
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheel-controls-bar,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheels-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheels-row,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #history-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #panels,
@@ -1875,10 +1858,6 @@ body {
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode #layer-tabs {
     display: none !important;
-  }
-
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode #wheel-controls-bar {
-    padding-top: 6px;
   }
 
   .header-title {
@@ -1898,15 +1877,14 @@ body {
     scroll-snap-type: x proximity;
   }
 
-  #wheel-controls-bar {
-    gap: 4px;
-    padding: 4px 10px 2px;
-  }
-
-  #wheel-controls-bar .small-btn {
+  #wheels-panel .panel-header-actions .small-btn {
     min-height: 28px;
     font-size: 9px;
     padding: 4px 8px;
+  }
+
+  #wheel-compare-btn {
+    min-width: 116px;
   }
 
   .tool-btn {
