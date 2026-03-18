@@ -2852,6 +2852,7 @@ function updatePanelUI(state: AppState): void {
 
   const wheelPinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
   if (wheelPinBtn) {
+    wheelPinBtn.style.display = stickyContext ? 'inline-flex' : 'none';
     wheelPinBtn.classList.toggle('active', wheelRowPinned);
     wheelPinBtn.textContent = wheelRowPinned ? 'Pin: On' : 'Pin: Off';
     wheelPinBtn.disabled = !stickyContext;
@@ -3097,6 +3098,8 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
+
 
 
 

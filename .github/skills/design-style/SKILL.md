@@ -14,7 +14,6 @@ description: |
   This skill automatically retrieves the appropriate design system prompt (Neo-brutalism, Modern Dark, Bauhaus, Cyberpunk, Material, etc.) to help create visually distinctive, production-grade frontend code instead of generic UI.
 
   IMPORTANT: Trigger this skill proactively for ANY frontend/UI work, not just when design style is explicitly mentioned.
-allowed-tools: Read, Glob, Grep
 ---
 
 # Design Style Skill
