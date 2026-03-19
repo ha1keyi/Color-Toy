@@ -3,7 +3,6 @@
  * Wires together: State, Renderer, ColorWheel (edit + rendered), UI Panels
  */
 import { store } from './state/store';
-import type { HistoryView } from './state/store';
 import {
   DEFAULT_CALIBRATION, DEFAULT_PRIMARIES, DEFAULT_TONING,
   SRGB_RED_XY, SRGB_GREEN_XY, SRGB_BLUE_XY, D65_WHITE_XY,
@@ -18,6 +17,21 @@ import {
   createColorStylePreset, createCreativeMappingPreset,
   applyPreset, importPresetFromJSON,
 } from './presets/presetManager';
+import { renderHistoryPanel } from './ui/panels/historyPanel';
+import { updatePanelState } from './ui/panels/panelState';
+import {
+  applyLayoutMode,
+  clampPreviewRatio,
+  getCurrentLayoutMode,
+  isImagePriorityMobileMode,
+  isMobileCompactViewport,
+  isValidLayout,
+  isValidMobileModule,
+  isWheelStickyContext,
+  toggleMobileModuleSelection,
+} from './ui/layout/layoutState';
+import type { UiLayoutMode } from './ui/layout/layoutState';
+import { setupLayoutProfileManager } from './ui/layout/layoutProfileManager';
 
 // DOM references
 let renderer: Renderer;
@@ -29,8 +43,7 @@ let dominantImageHues: number[] = [];
 type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'colorToy.theme';
 type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
-type UiLayoutMode = 'image-priority' | 'controls-priority';
-type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history' | 'presets';
+type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'layout' | 'history' | 'presets';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -140,70 +153,6 @@ function titleCaseLabel(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function formatHistoryTimestamp(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function renderHistoryPanel(history: HistoryView): void {
-  const list = document.getElementById('history-list');
-  const status = document.getElementById('history-panel-status');
-  const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement | null;
-  const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement | null;
-
-  if (undoBtn) {
-    undoBtn.disabled = !history.canUndo;
-  }
-  if (redoBtn) {
-    redoBtn.disabled = !history.canRedo;
-  }
-
-  if (status) {
-    status.textContent = history.entries.length === 0 ? '0 / 0' : `${history.index + 1} / ${history.entries.length}`;
-  }
-
-  if (!list) {
-    return;
-  }
-
-  const items = history.entries
-    .map((entry, index) => ({ ...entry, index }))
-    .reverse();
-
-  list.innerHTML = items
-    .map((entry) => `
-      <button class="history-item ${entry.index === history.index ? 'active' : ''}" data-history-index="${entry.index}" type="button">
-        <span class="history-item-main">
-          <span class="history-item-label">${escapeHtml(entry.label)}</span>
-          <span class="history-item-time">${formatHistoryTimestamp(entry.timestamp)}</span>
-        </span>
-        <span class="history-item-index">#${entry.index + 1}</span>
-      </button>
-    `)
-    .join('');
-
-  list.querySelectorAll('.history-item').forEach((button) => {
-    button.addEventListener('click', () => {
-      const index = Number((button as HTMLElement).dataset.historyIndex);
-      if (Number.isFinite(index)) {
-        store.goToHistory(index);
-      }
-    });
-  });
-}
-
 function setupHistoryPanel(): void {
   store.registerHistorySource('toneCurve', {
     capture: () => cloneToneCurvePoints(toneCurvePoints),
@@ -214,7 +163,13 @@ function setupHistoryPanel(): void {
       drawToneCurve();
     },
   });
-  store.subscribeHistory(renderHistoryPanel);
+  store.subscribeHistory((history) => {
+    renderHistoryPanel(history, {
+      onJumpToHistory: (index) => {
+        store.goToHistory(index);
+      },
+    });
+  });
 }
 
 function init(): void {
@@ -269,6 +224,7 @@ function init(): void {
   setupWheelControls();
   setupPreviewControlsDivider();
   setupMobileModuleBar();
+  setupLayoutProfileControls();
   setupPresets();
   setupExport();
   setupKeyboard();
@@ -298,6 +254,19 @@ function init(): void {
   // Handle window resize
   window.addEventListener('resize', handleResize);
   handleResize();
+}
+
+function setMobileModuleSelection(value: MobileModule): void {
+  _mobileModuleSelection = value;
+  syncMobileModuleBarSelection();
+}
+
+function syncMobileModuleBarSelection(): void {
+  const buttons = Array.from(document.querySelectorAll('.mobile-module-btn')) as HTMLButtonElement[];
+  buttons.forEach((btn) => {
+    const moduleName = btn.dataset.mobileModule as MobileModule | undefined;
+    btn.classList.toggle('active', moduleName === _mobileModuleSelection);
+  });
 }
 
 function applyTheme(theme: ThemeMode, button?: HTMLButtonElement | null): void {
@@ -1007,41 +976,8 @@ function setupPanels(): void {
   setupColorPickerPrecisionControls();
 }
 
-function applyLayoutMode(mode: UiLayoutMode): void {
-  document.documentElement.setAttribute('data-ui-layout', mode);
-  if (mode === 'controls-priority') {
-    _mobileModuleSelection = 'none';
-  }
-}
-
-function isMobileCompactViewport(): boolean {
-  return window.matchMedia('(max-width: 767px)').matches;
-}
-
-function isImagePriorityMobileMode(): boolean {
-  return document.documentElement.getAttribute('data-ui-layout') === 'image-priority' && isMobileCompactViewport();
-}
-
-function getCurrentLayoutMode(): UiLayoutMode {
-  return document.documentElement.getAttribute('data-ui-layout') === 'image-priority'
-    ? 'image-priority'
-    : 'controls-priority';
-}
-
-function isWheelStickyContext(): boolean {
-  return isImagePriorityMobileMode() && _mobileModuleSelection !== 'none';
-}
-
-function clampPreviewRatio(value: number): number {
-  return Math.max(0.38, Math.min(0.84, value));
-}
-
 function setupLayoutControls(): void {
   const layoutToggleBtn = document.getElementById('layout-toggle-btn') as HTMLButtonElement | null;
-
-  const isValidLayout = (value: string): value is UiLayoutMode => (
-    value === 'image-priority' || value === 'controls-priority'
-  );
 
   const updateLayoutButton = (mode: UiLayoutMode) => {
     if (!layoutToggleBtn) return;
@@ -1071,16 +1007,20 @@ function setupLayoutControls(): void {
     },
   });
 
-  applyLayoutMode(initialLayout);
+  applyLayoutMode(initialLayout, () => {
+    setMobileModuleSelection('none');
+  });
 
   updateLayoutButton(initialLayout);
 
   if (layoutToggleBtn) {
     layoutToggleBtn.addEventListener('click', () => {
       const current = getCurrentLayoutMode();
-      const selected: UiLayoutMode = current === 'controls-priority' ? 'image-priority' : 'controls-priority';
+      const selected = current === 'controls-priority' ? 'image-priority' : 'controls-priority';
       window.localStorage.setItem(UI_LAYOUT_STORAGE_KEY, selected);
-      applyLayoutMode(selected);
+      applyLayoutMode(selected, () => {
+        setMobileModuleSelection('none');
+      });
       if (selected === 'controls-priority') {
         const state = store.getState();
         if (state.ui.wheelPinned) {
@@ -1099,13 +1039,42 @@ function setupLayoutControls(): void {
   }
 }
 
+function setupLayoutProfileControls(): void {
+  setupLayoutProfileManager({
+    getState: () => store.getState(),
+    getLayoutMode: () => getCurrentLayoutMode(),
+    setLayoutMode: (mode) => {
+      window.localStorage.setItem(UI_LAYOUT_STORAGE_KEY, mode);
+      applyLayoutMode(mode, () => {
+        setMobileModuleSelection('none');
+      });
+    },
+    getMobileModuleSelection: () => _mobileModuleSelection,
+    setMobileModuleSelection,
+    setUiPatch: (patch) => {
+      const current = store.getState();
+      store.update({
+        ui: {
+          ...current.ui,
+          ...patch,
+        },
+      });
+    },
+    collapseStoragePrefix: MODULE_COLLAPSE_STORAGE_PREFIX,
+    onApplied: () => {
+      updatePanelUI(store.getState());
+      handleResize();
+    },
+  });
+}
+
 function setupWheelControls(): void {
   const pinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
 
   if (pinBtn) {
     pinBtn.addEventListener('click', () => {
       const state = store.getState();
-      const stickyContext = isWheelStickyContext();
+      const stickyContext = isWheelStickyContext(_mobileModuleSelection);
       store.update({
         ui: {
           ...state.ui,
@@ -1203,23 +1172,13 @@ function setupPreviewControlsDivider(): void {
 
 function setupMobileModuleBar(): void {
   const buttons = Array.from(document.querySelectorAll('.mobile-module-btn')) as HTMLButtonElement[];
-  const isValidModule = (value: string): value is MobileModule => (
-    value === 'none' || value === 'calibration' || value === 'mapping' || value === 'toning' || value === 'history' || value === 'presets'
-  );
-
-  const applySelectionUI = () => {
-    buttons.forEach((btn) => {
-      const moduleName = btn.dataset.mobileModule as MobileModule | undefined;
-      btn.classList.toggle('active', moduleName === _mobileModuleSelection);
-    });
-  };
 
   buttons.forEach((button) => {
     button.addEventListener('click', () => {
       const next = button.dataset.mobileModule || 'none';
-      if (!isValidModule(next)) return;
+      if (!isValidMobileModule(next)) return;
 
-      _mobileModuleSelection = _mobileModuleSelection === next ? 'none' : next;
+      setMobileModuleSelection(toggleMobileModuleSelection(_mobileModuleSelection, next));
       if (_mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning') {
         const state = store.getState();
         store.update({
@@ -1242,13 +1201,12 @@ function setupMobileModuleBar(): void {
         }
       }
 
-      applySelectionUI();
       updatePanelUI(store.getState());
       handleResize();
     });
   });
 
-  applySelectionUI();
+  syncMobileModuleBarSelection();
   window.addEventListener('resize', () => {
     updatePanelUI(store.getState());
   });
@@ -1284,6 +1242,7 @@ function setupModuleCollapse(): void {
       collapsed = !collapsed;
       window.localStorage.setItem(storageKey, collapsed ? '1' : '0');
       apply();
+      updatePanelUI(store.getState());
       handleResize();
     });
   }
@@ -2709,255 +2668,18 @@ function drawHistogram(): void {
 // ============ UI Updates ============
 
 function updatePanelUI(state: AppState): void {
-  // Show/hide panels based on active layer
-  const calibrationPanel = document.getElementById('calibration-panel');
-  const wheelsPanel = document.getElementById('wheels-panel');
-  const xyPanel = document.getElementById('xy-panel');
-  const mappingPanel = document.getElementById('mapping-panel');
-  const toningPanel = document.getElementById('toning-panel');
-  const wheelsRow = document.getElementById('wheels-row');
-  const historyPanel = document.getElementById('history-panel');
-  const panels = document.getElementById('panels');
-  const controls = document.getElementById('controls');
-  const mobileBar = document.getElementById('mobile-module-bar');
-  const bottomBar = document.getElementById('bottom-bar');
-  const presetSection = document.getElementById('preset-section');
-  const capabilities = document.getElementById('capabilities');
-
-  const wheelsAvailableByLayer = state.ui.activeLayer !== 'toning';
-  const calibrationActive = state.ui.activeLayer === 'calibration';
-
-  if (wheelsPanel) wheelsPanel.style.display = wheelsAvailableByLayer ? 'block' : 'none';
-  if (calibrationPanel) calibrationPanel.style.display = calibrationActive ? 'block' : 'none';
-  if (xyPanel) xyPanel.style.display = calibrationActive ? 'block' : 'none';
-  if (mappingPanel) mappingPanel.style.display = state.ui.activeLayer === 'mapping' ? 'block' : 'none';
-  if (toningPanel) toningPanel.style.display = state.ui.activeLayer === 'toning' ? 'block' : 'none';
-
-  if (wheelsRow) wheelsRow.style.display = wheelsAvailableByLayer ? 'flex' : 'none';
-
-  const imagePriorityMobile = isImagePriorityMobileMode();
-  const stickyContext = imagePriorityMobile && _mobileModuleSelection !== 'none';
-  const wheelRowPinned = stickyContext && state.ui.wheelPinned;
-  if (mobileBar) {
-    mobileBar.classList.toggle('active', imagePriorityMobile);
-  }
-
-  if (controls) {
-    controls.classList.toggle('image-priority-mode', imagePriorityMobile);
-    controls.classList.toggle('module-open', stickyContext);
-    controls.classList.toggle('wheel-sticky-context', stickyContext);
-    controls.classList.toggle('wheel-pinned', wheelRowPinned);
-    controls.style.setProperty('--wheel-controls-sticky-offset', '0px');
-  }
-
-  if (imagePriorityMobile) {
-    if (historyPanel) {
-      historyPanel.style.display = _mobileModuleSelection === 'history' ? 'block' : 'none';
-    }
-
-    const layerSelection = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning';
-    const presetsSelection = _mobileModuleSelection === 'presets';
-    if (panels) {
-      panels.style.display = layerSelection ? 'block' : 'none';
-    }
-
-    if (bottomBar) {
-      bottomBar.style.display = presetsSelection ? 'block' : 'none';
-    }
-    if (presetSection) {
-      presetSection.style.display = presetsSelection ? 'flex' : 'none';
-    }
-    if (capabilities) {
-      capabilities.style.display = presetsSelection ? 'block' : 'none';
-    }
-
-    if (wheelsPanel) {
-      const wheelsSelection = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping';
-      wheelsPanel.style.display = wheelsSelection ? 'block' : 'none';
-    }
-    if (calibrationPanel) calibrationPanel.style.display = _mobileModuleSelection === 'calibration' ? 'block' : 'none';
-    if (xyPanel) xyPanel.style.display = _mobileModuleSelection === 'calibration' ? 'block' : 'none';
-    if (mappingPanel) mappingPanel.style.display = _mobileModuleSelection === 'mapping' ? 'block' : 'none';
-    if (toningPanel) toningPanel.style.display = _mobileModuleSelection === 'toning' ? 'block' : 'none';
-
-    if (wheelsRow) {
-      const shouldShowWheels = _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping';
-      wheelsRow.style.display = shouldShowWheels ? 'flex' : 'none';
-    }
-  } else {
-    if (wheelsPanel) wheelsPanel.style.display = wheelsAvailableByLayer ? 'block' : 'none';
-    if (historyPanel) historyPanel.style.display = 'block';
-    if (panels) panels.style.display = 'block';
-    if (bottomBar) bottomBar.style.display = 'block';
-    if (presetSection) presetSection.style.display = 'flex';
-    if (capabilities) capabilities.style.display = 'block';
-  }
-
-  if (wheelsRow && !imagePriorityMobile) {
-    const shouldShowWheels = state.ui.activeLayer !== 'toning';
-    wheelsRow.style.display = shouldShowWheels ? 'flex' : 'none';
-  }
-
-  const splitBtn = document.getElementById('split-btn');
-  if (splitBtn) splitBtn.classList.toggle('active', state.ui.splitView);
-
-  const layoutToggleBtn = document.getElementById('layout-toggle-btn') as HTMLButtonElement | null;
-  if (layoutToggleBtn) {
-    const layoutMode = getCurrentLayoutMode();
-    layoutToggleBtn.classList.toggle('active', layoutMode === 'image-priority');
-    const label = layoutToggleBtn.querySelector('span') || layoutToggleBtn;
-    label.textContent = layoutMode === 'image-priority' ? 'Layout: Image' : 'Layout: Controls';
-  }
-
-  const holdCompareBtn = document.getElementById('hold-compare-btn') as HTMLButtonElement | null;
-  if (holdCompareBtn) {
-    holdCompareBtn.classList.toggle('active', state.ui.holdCompareActive);
-    holdCompareBtn.disabled = !state.imageLoaded;
-  }
-
-  const wheelPinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
-  if (wheelPinBtn) {
-    wheelPinBtn.style.display = stickyContext ? 'inline-flex' : 'none';
-    wheelPinBtn.classList.toggle('active', wheelRowPinned);
-    wheelPinBtn.textContent = wheelRowPinned ? 'Pin: On' : 'Pin: Off';
-    wheelPinBtn.disabled = !stickyContext;
-    wheelPinBtn.title = stickyContext
-      ? 'Pin wheel area while scrolling'
-      : 'Pin is available in image-priority mode with an opened module';
-  }
-
-  const mappingPickerBtn = document.getElementById('add-mapping-picker-btn') as HTMLButtonElement | null;
-  if (mappingPickerBtn) {
-    mappingPickerBtn.classList.toggle('active', state.ui.colorPickerActive && state.ui.activeLayer === 'mapping');
-    mappingPickerBtn.disabled = !state.imageLoaded;
-  }
-
-  const workingSpaceSelect = document.getElementById('working-space-select') as HTMLSelectElement | null;
-  if (workingSpaceSelect && document.activeElement !== workingSpaceSelect) {
-    workingSpaceSelect.value = state.ui.workingColorSpace;
-  }
-
-  const gamutToggle = document.getElementById('gamut-compression-toggle') as HTMLButtonElement | null;
-  if (gamutToggle) {
-    gamutToggle.classList.toggle('active', state.ui.gamutCompressionEnabled);
-    gamutToggle.textContent = state.ui.gamutCompressionEnabled ? 'On' : 'Off';
-  }
-
-  const iccReadout = document.getElementById('icc-profile-readout');
-  if (iccReadout) {
-    if (state.ui.importedIccProfileName) {
-      const src = state.ui.importedIccSource ? ` (${state.ui.importedIccSource})` : '';
-      iccReadout.textContent = `ICC: ${state.ui.importedIccProfileName}${src}`;
-    } else {
-      iccReadout.textContent = 'ICC: Not detected';
-    }
-  }
-
-  updateSlider('picker-radius-slider', state.ui.colorPickerRadiusPx);
-  const pickerCoordReadout = document.getElementById('picker-coord-readout');
-  if (pickerCoordReadout) {
-    if (state.ui.colorPickerCoord) {
-      pickerCoordReadout.textContent = `Pixel: ${state.ui.colorPickerCoord.x}, ${state.ui.colorPickerCoord.y}`;
-    } else {
-      pickerCoordReadout.textContent = 'Pixel: -, -';
-    }
-  }
-
-  // Update calibration slider values
-  updateSlider('red-hue-slider', state.calibration.red.hueShift);
-  updateSlider('red-sat-slider', state.calibration.red.saturation);
-  updateSlider('green-hue-slider', state.calibration.green.hueShift);
-  updateSlider('green-sat-slider', state.calibration.green.saturation);
-  updateSlider('blue-hue-slider', state.calibration.blue.hueShift);
-  updateSlider('blue-sat-slider', state.calibration.blue.saturation);
-
-  // Update xy input values
-  updateNumberInput('red-x-input', state.primaries.red[0]);
-  updateNumberInput('red-y-input', state.primaries.red[1]);
-  updateNumberInput('green-x-input', state.primaries.green[0]);
-  updateNumberInput('green-y-input', state.primaries.green[1]);
-  updateNumberInput('blue-x-input', state.primaries.blue[0]);
-  updateNumberInput('blue-y-input', state.primaries.blue[1]);
-
-  // Update toning slider values
-  updateSlider('exposure-slider', state.toning.exposure);
-  updateSlider('contrast-slider', state.toning.contrast);
-  updateSlider('highlights-slider', state.toning.highlights);
-  updateSlider('shadows-slider', state.toning.shadows);
-  updateSlider('whites-slider', state.toning.whites);
-  updateSlider('blacks-slider', state.toning.blacks);
-  updateSlider('global-hue-slider', state.globalHueShift);
-  updateToneCurveControlUI(state);
-
-  // Mapping detail panel
-  updateMappingDetail(state);
-
-  // Update mapping list
-  updateMappingList(state);
-  applyPreviewControlsSplit(state);
-
-  updateSplitDividerUI(state);
-}
-
-function updateSlider(id: string, value: number): void {
-  const el = document.getElementById(id) as HTMLInputElement;
-  if (el && document.activeElement !== el) {
-    el.value = String(value);
-  }
-  // Update associated value input (now an <input type="number"> with class val-input)
-  const valEl = document.getElementById(id + '-val') as HTMLInputElement | null;
-  if (valEl && document.activeElement !== valEl) {
-    valEl.value = value.toFixed(2);
-  }
-}
-
-function updateNumberInput(id: string, value: number): void {
-  const el = document.getElementById(id) as HTMLInputElement;
-  if (el && document.activeElement !== el) {
-    el.value = value.toFixed(4);
-  }
-}
-
-function updateMappingDetail(state: AppState): void {
-  const detailPanel = document.getElementById('mapping-detail');
-  if (!detailPanel) return;
-
-  const sel = state.ui.selectedMappingId;
-  const mapping = sel ? state.localMappings.find(m => m.id === sel) : null;
-
-  if (mapping) {
-    detailPanel.style.display = 'block';
-    updateSlider('mapping-src-slider', mapping.srcHue);
-    updateSlider('mapping-dst-slider', mapping.dstHue);
-    updateSlider('mapping-range-slider', mapping.range);
-    updateSlider('mapping-strength-slider', mapping.strength);
-  } else {
-    detailPanel.style.display = 'none';
-  }
-}
-
-function updateMappingList(state: AppState): void {
-  const list = document.getElementById('mapping-list');
-  if (!list) return;
-
-  list.innerHTML = state.localMappings.map((m) => {
-    const srcDeg = Math.round(m.srcHue * 360);
-    const dstDeg = Math.round(m.dstHue * 360);
-    const isSelected = state.ui.selectedMappingId === m.id;
-    return `<div class="mapping-item ${isSelected ? 'selected' : ''}" data-id="${m.id}">
-      <span class="mapping-color" style="background:hsl(${srcDeg},80%,50%)"></span>
-      <span>${srcDeg}\u00b0 \u2192 ${dstDeg}\u00b0</span>
-      <span class="mapping-range">${Math.round(m.range * 360)}\u00b0</span>
-    </div>`;
-  }).join('');
-
-  list.querySelectorAll('.mapping-item').forEach((item) => {
-    item.addEventListener('click', () => {
-      const id = (item as HTMLElement).dataset.id!;
+  updatePanelState(state, {
+    isImagePriorityMobileMode,
+    getCurrentLayoutMode,
+    mobileModuleSelection: _mobileModuleSelection,
+    onSelectMapping: (id, currentState) => {
       store.update({
-        ui: { ...state.ui, selectedMappingId: id },
+        ui: { ...currentState.ui, selectedMappingId: id },
       });
-    });
+    },
+    applyPreviewControlsSplit,
+    updateSplitDividerUI,
+    updateToneCurveControlUI,
   });
 }
 

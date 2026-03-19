@@ -1,3 +1,5 @@
+/* global console, process */
+
 // Generate PNG icons from SVG sources using sharp
 // Usage: npm install sharp --save-dev
 //        npm run icons:gen

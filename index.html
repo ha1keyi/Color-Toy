@@ -21,13 +21,13 @@
     <!-- Header -->
     <header id="header">
       <div class="header-left">
-        <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)">
+        <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo (Ctrl+Z)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M3 10h10a5 5 0 0 1 0 10H8" />
             <path d="M3 10l5-5M3 10l5 5" />
           </svg>
         </button>
-        <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Shift+Z)">
+        <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo (Ctrl+Shift+Z)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M21 10H11a5 5 0 0 0 0 10h5" />
             <path d="M21 10l-5-5M21 10l-5 5" />
@@ -73,7 +73,7 @@
     </div>
 
     <!-- Error message -->
-    <div id="error-msg" style="display:none"></div>
+    <div id="error-msg" style="display:none" role="alert" aria-live="assertive"></div>
     <div id="compare-hint" class="compare-hint" style="display:none">
       Tip: Hold "Hold Compare" to temporarily view original image. Split Compare remains for fixed divider comparison.
     </div>
@@ -95,12 +95,12 @@
         <input type="file" id="image-input" accept="image/jpeg,image/png,image/webp" hidden>
       </div>
       <canvas id="gl-canvas" style="display:none"></canvas>
-      <div id="split-divider" style="display:none" aria-label="Split Divider" title="Drag to adjust split compare">
+      <div id="split-divider" style="display:none" aria-label="Split Divider" title="Drag to adjust split compare" role="separator" aria-orientation="vertical">
         <span class="split-divider-handle"></span>
       </div>
     </div>
 
-    <div id="preview-controls-divider" aria-label="Resize preview and operations" title="Drag to resize image and operation areas"></div>
+    <div id="preview-controls-divider" aria-label="Resize preview and operations" title="Drag to resize image and operation areas" role="separator" aria-orientation="horizontal"></div>
 
     <!-- Controls Sidebar -->
     <div id="controls">
@@ -116,19 +116,6 @@
           <span class="tab-num">3</span>Toning
         </button>
       </div>
-
-      <section id="history-panel" aria-label="Edit History">
-        <div class="history-panel-header">
-          <h3 class="history-panel-title">History</h3>
-          <div class="history-panel-actions">
-            <span id="history-panel-status" class="history-panel-status">0 / 0</span>
-            <button id="history-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-              data-collapse-target="history-panel"
-              aria-controls="history-list" title="Collapse history">▾</button>
-          </div>
-        </div>
-        <div id="history-list" class="history-list"></div>
-      </section>
 
       <!-- Dynamic Panels -->
       <div id="panels">
@@ -419,18 +406,66 @@
           </div>
         </div>
       </div>
+
     </div>
 
     <nav id="mobile-module-bar" aria-label="Mobile Operations" class="mobile-module-bar">
       <button class="mobile-module-btn" data-mobile-module="calibration" type="button">Calibration</button>
       <button class="mobile-module-btn" data-mobile-module="mapping" type="button">Hue Map</button>
       <button class="mobile-module-btn" data-mobile-module="toning" type="button">Toning</button>
+      <button class="mobile-module-btn" data-mobile-module="layout" type="button">Layout</button>
       <button class="mobile-module-btn" data-mobile-module="history" type="button">History</button>
       <button class="mobile-module-btn" data-mobile-module="presets" type="button">Presets</button>
     </nav>
 
     <!-- Bottom Bar -->
     <div id="bottom-bar">
+      <section id="layout-manager-panel" class="panel" aria-label="Layout Manager">
+        <div class="panel-header">
+          <h3 class="panel-title">Layout Studio</h3>
+          <div class="panel-header-actions">
+            <button id="layout-manager-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+              data-collapse-target="layout-manager-panel"
+              aria-controls="layout-manager-panel" title="Collapse layout manager">▾</button>
+          </div>
+        </div>
+        <div class="layout-manager-content">
+          <div class="layout-control-item">
+            <span>Profile</span>
+            <select id="layout-profile-select" aria-label="Layout profile"></select>
+          </div>
+          <div class="layout-manager-list-wrap">
+            <span class="layout-manager-list-label">Drag To Reorder</span>
+            <ul id="layout-profile-list" class="layout-profile-list" aria-label="Layout profile order"></ul>
+          </div>
+          <div class="layout-manager-actions">
+            <button id="layout-save-current-btn" class="small-btn" type="button">Save Current</button>
+            <button id="layout-save-as-btn" class="small-btn" type="button">Save As</button>
+            <button id="layout-rename-btn" class="small-btn" type="button">Rename</button>
+            <button id="layout-delete-btn" class="small-btn danger" type="button">Delete</button>
+            <button id="layout-default-lock-btn" class="small-btn" type="button">Lock As Default</button>
+            <button id="layout-rollback-btn" class="small-btn" type="button">Rollback Last</button>
+            <button id="layout-export-btn" class="small-btn" type="button">Export</button>
+            <button id="layout-import-btn" class="small-btn" type="button">Import</button>
+            <input id="layout-import-input" type="file" accept="application/json" hidden>
+          </div>
+          <div id="layout-manager-status" class="layout-manager-status" aria-live="polite">Ready</div>
+        </div>
+      </section>
+
+      <section id="history-panel" aria-label="Edit History">
+        <div class="history-panel-header">
+          <h3 class="history-panel-title">History</h3>
+          <div class="history-panel-actions">
+            <span id="history-panel-status" class="history-panel-status">0 / 0</span>
+            <button id="history-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+              data-collapse-target="history-panel"
+              aria-controls="history-list" title="Collapse history">▾</button>
+          </div>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </section>
+
       <div id="preset-section">
         <div id="preset-list" class="preset-list"></div>
         <div class="preset-actions">

@@ -1,3 +1,5 @@
+/* global MutationObserver, clearInterval, console, document, setInterval, window */
+
 // Mutation observer helper for debugging wheel-pin / sticky transitions
 // Usage:
 // - Paste into browser console, or include via a <script> tag during local dev.
@@ -73,9 +75,9 @@
   // Provide a small API to stop observers
   window.__colorToyMutationObservers = {
     stop() {
-      controlsObs && controlsObs.disconnect();
-      wheelBarObs && wheelBarObs.disconnect();
-      wheelsRowObs && wheelsRowObs.disconnect();
+      if (controlsObs) controlsObs.disconnect();
+      if (wheelBarObs) wheelBarObs.disconnect();
+      if (wheelsRowObs) wheelsRowObs.disconnect();
       clearInterval(pollId);
       log('stopped observers');
     },

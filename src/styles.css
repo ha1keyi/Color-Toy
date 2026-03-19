@@ -103,7 +103,7 @@ body {
   height: 100%;
   overflow: hidden;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   background: radial-gradient(circle at 16% -20%, rgba(255, 255, 255, 0.035) 0%, transparent 44%),
     radial-gradient(circle at 84% -10%, rgba(255, 255, 255, 0.02) 0%, transparent 42%),
@@ -203,7 +203,7 @@ body {
 }
 
 .top-global-actions .tool-btn {
-  min-height: 32px;
+  min-height: 44px;
 }
 
 .header-left,
@@ -297,8 +297,8 @@ body {
 }
 
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -325,8 +325,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
-  padding: 6px 18px;
+  min-height: 44px;
+  padding: 8px 18px;
   background: var(--accent);
   color: white;
   border: none;
@@ -523,8 +523,8 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  min-height: 34px;
-  padding: 5px 10px;
+  min-height: 44px;
+  padding: 8px 12px;
   background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -590,7 +590,7 @@ body {
 }
 
 .layout-control-item select {
-  min-height: 34px;
+  min-height: 44px;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -606,10 +606,120 @@ body {
   box-shadow: 0 0 0 2px rgba(45, 133, 255, 0.2);
 }
 
+#layout-manager-panel {
+  margin-top: 6px;
+}
+
+.layout-manager-content {
+  display: grid;
+  gap: 6px;
+}
+
+.layout-manager-list-wrap {
+  display: grid;
+  gap: 4px;
+}
+
+.layout-manager-list-label {
+  font-family: var(--text-mono);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.layout-profile-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 126px;
+  overflow-y: auto;
+}
+
+.layout-profile-item {
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  cursor: grab;
+}
+
+.layout-profile-item.dragging {
+  opacity: 0.6;
+}
+
+.layout-profile-item.active {
+  border-color: rgba(45, 133, 255, 0.4);
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+.layout-drag-handle {
+  font-family: var(--text-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.layout-profile-name {
+  min-width: 0;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout-profile-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.layout-profile-badge {
+  font-family: var(--text-mono);
+  font-size: 8px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 5px;
+}
+
+.layout-profile-badge.lock {
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #e7c078;
+}
+
+.layout-manager-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.layout-manager-actions .small-btn {
+  width: 100%;
+}
+
+.layout-manager-status {
+  min-height: 18px;
+  font-family: var(--text-mono);
+  font-size: 8.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
 .layer-tab {
   flex: 1;
-  min-height: 34px;
-  padding: 7px 4px;
+  min-height: 44px;
+  padding: 8px 6px;
   background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -684,6 +794,13 @@ body {
 
 #wheels-panel .panel-header-actions .small-btn {
   flex: 0 0 auto;
+}
+
+#wheel-pin-btn {
+  min-width: 82px;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
 }
 
 #wheel-compare-btn {
@@ -764,8 +881,8 @@ body {
 
 #history-panel,
 .panel {
-  margin: 8px 6px;
-  padding: 10px;
+  margin: 6px;
+  padding: 8px;
   background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -778,7 +895,7 @@ body {
 }
 
 #history-panel {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 #calibration-panel {
@@ -791,8 +908,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -846,7 +963,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 148px;
+  max-height: 132px;
   overflow-y: auto;
   padding-right: 2px;
 }
@@ -870,7 +987,7 @@ body {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  padding: 7px 9px;
+  padding: 6px 8px;
   background: var(--bg-glass);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -878,7 +995,7 @@ body {
   cursor: pointer;
   text-align: left;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
-  min-height: 34px;
+  min-height: 30px;
 }
 
 .history-item:hover {
@@ -988,7 +1105,7 @@ body {
 }
 
 .panel {
-  padding: 10px;
+  padding: 8px;
 }
 
 .panel.is-collapsed> :not(.panel-header) {
@@ -997,6 +1114,21 @@ body {
 
 #history-panel.is-collapsed .history-list {
   display: none;
+}
+
+.panel.is-collapsed,
+#history-panel.is-collapsed {
+  padding: 5px 7px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.panel.is-collapsed .panel-header,
+#history-panel.is-collapsed .history-panel-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  min-height: 24px;
 }
 
 .panel-title {
@@ -1014,8 +1146,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1050,8 +1182,8 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
-  padding: 2px 0;
+  margin-bottom: 3px;
+  padding: 1px 0;
 }
 
 .slider-row label {
@@ -1611,8 +1743,8 @@ body {
 }
 
 .small-btn {
-  min-height: 34px;
-  padding: 5px 12px;
+  min-height: 44px;
+  padding: 8px 12px;
   background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1850,6 +1982,7 @@ body {
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #layer-tabs,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheels-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheels-row,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #layout-manager-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #history-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #panels,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #bottom-bar {
@@ -1902,8 +2035,12 @@ body {
     padding: 8px 10px 4px;
   }
 
+  .layout-manager-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   #history-panel {
-    margin: 8px 6px;
+    margin: 6px;
   }
 
   .history-list {
@@ -1957,7 +2094,7 @@ body {
     right: calc(8px + env(safe-area-inset-right, 0px));
     bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     display: none;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
     padding: 6px;
     border: 1px solid var(--border);
@@ -2125,6 +2262,25 @@ body {
 
 .panel {
   animation: fadeIn 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  #app::before {
+    animation: none;
+  }
+
+  :where(.icon-btn, .primary-btn, .tool-btn, .small-btn, .layer-tab, .reset-module-btn, .collapsible-toggle, .mapping-item, .preset-item):hover {
+    transform: none;
+  }
 }
 
 /* ============ Focus styles ============ */
