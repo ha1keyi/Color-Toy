@@ -4,7 +4,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  /* Surface palette â€?pure deep gray */
+  /* Surface palette ï¿½ï¿½?pure deep gray */
   --bg-primary: #0a0a0a;
   --bg-secondary: #171717;
   --bg-tertiary: #1e1e1e;
@@ -43,7 +43,7 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
 
-  /* Shadows â€?layered for depth */
+  /* Shadows ï¿½ï¿½?layered for depth */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.5), 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -773,7 +773,7 @@ body {
 }
 
 #history-panel,
-#panels > .panel {
+#panels>.panel {
   width: calc(100% - 12px);
 }
 
@@ -991,7 +991,7 @@ body {
   padding: 10px;
 }
 
-.panel.is-collapsed > :not(.panel-header) {
+.panel.is-collapsed> :not(.panel-header) {
   display: none;
 }
 
@@ -1984,6 +1984,7 @@ body {
 }
 
 @media (any-pointer: coarse) {
+
   .icon-btn,
   .tool-btn,
   .small-btn,
@@ -2141,4 +2142,3 @@ button:focus:not(:focus-visible) {
   background: rgba(45, 133, 255, 0.36);
   color: var(--text-primary);
 }
-
