@@ -224,7 +224,6 @@ function init(): void {
   setupLayoutControls();
   setupWheelControls();
   setupPreviewControlsDivider();
-  setupPreviewControlsSlider();
   setupMobileModuleBar();
   setupLayoutProfileControls();
   setupPresets();
@@ -1170,6 +1169,7 @@ function setupPreviewControlsDivider(): void {
     dragging = true;
     activePointerId = e.pointerId;
     divider.setPointerCapture(e.pointerId);
+    divider.classList.add('dragging');
     updateByClientY(e.clientY);
   });
 
@@ -1184,51 +1184,13 @@ function setupPreviewControlsDivider(): void {
     if (pointerId !== undefined && activePointerId !== null && pointerId !== activePointerId) return;
     dragging = false;
     activePointerId = null;
+    divider.classList.remove('dragging');
     handleResize();
   };
 
   window.addEventListener('pointerup', (e) => finish(e.pointerId));
   window.addEventListener('pointercancel', (e) => finish(e.pointerId));
   divider.addEventListener('lostpointercapture', () => finish());
-}
-
-function setupPreviewControlsSlider(): void {
-  const slider = document.getElementById('preview-controls-slider') as HTMLInputElement | null;
-  if (!slider) return;
-
-  const updateSliderFromState = (state?: AppState) => {
-    const st = state ?? store.getState();
-    const layoutMode = getCurrentLayoutMode();
-    const storedRatio = layoutMode === 'image-priority'
-      ? st.ui.imagePriorityPreviewRatio
-      : st.ui.controlsPriorityPreviewRatio;
-    const percent = Math.round(clampPreviewRatio(storedRatio) * 100);
-    slider.value = String(percent);
-    // update fill background-size via data attribute
-    slider.setAttribute('data-fill', String(percent));
-    slider.style.backgroundSize = `${percent}% 100%`;
-  };
-
-  slider.addEventListener('input', (e) => {
-    const val = Number((e.target as HTMLInputElement).value) / 100;
-    const clamped = clampPreviewRatio(val);
-    const state = store.getState();
-    const layoutMode = getCurrentLayoutMode();
-    const nextUi = layoutMode === 'image-priority'
-      ? { ...state.ui, imagePriorityPreviewRatio: clamped }
-      : { ...state.ui, controlsPriorityPreviewRatio: clamped };
-    store.update({ ui: nextUi });
-    window.localStorage.setItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}${layoutMode}`, String(clamped));
-    // visual fill update
-    const pct = Math.round(clamped * 100);
-    slider.setAttribute('data-fill', String(pct));
-    slider.style.backgroundSize = `${pct}% 100%`;
-  });
-
-  // Keep slider in sync with state changes
-  store.subscribe((state) => updateSliderFromState(state));
-  // Initialize immediately
-  updateSliderFromState();
 }
 
 function setupMobileModuleBar(): void {
@@ -2755,10 +2717,23 @@ function updateCapabilitiesDisplay(): void {
 // ============ Resize ============
 
 function handleResize(): void {
-  renderer.setRenderScale(getAdaptiveRenderScale());
-  applyPreviewControlsSplit(store.getState());
-  colorWheel.resize();
   const state = store.getState();
+
+  // If no image loaded, hide GL canvas and show drop zone to avoid black canvas
+  const glCanvasEl = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  const dropZoneEl = document.getElementById('drop-zone') as HTMLElement | null;
+  if (!state.imageLoaded) {
+    if (glCanvasEl) glCanvasEl.style.display = 'none';
+    if (dropZoneEl) dropZoneEl.style.display = 'flex';
+    return;
+  }
+
+  // ensure drop zone hidden when image present
+  if (dropZoneEl) dropZoneEl.style.display = 'none';
+
+  renderer.setRenderScale(getAdaptiveRenderScale());
+  applyPreviewControlsSplit(state);
+  colorWheel.resize();
   requestUiRender('wheel');
   updateHistogram();
 

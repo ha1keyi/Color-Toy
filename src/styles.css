@@ -58,8 +58,6 @@
   --track-bg: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.08) 100%);
   --track-height: 3px;
   --thumb-size: 14px;
-  --slider-width: 180px;
-  --slider-thumb: 14px;
 }
 
 :root[data-theme='light'] {
@@ -1989,64 +1987,6 @@ body {
     gap: 5px;
   }
 
-  /* Preview / Controls slider */
-  .preview-slider-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: 12px;
-  }
-  .preview-slider-label {
-    font-size: 11px;
-    color: var(--text-dim);
-    font-family: var(--text-mono);
-    letter-spacing: 0.4px;
-  }
-  #preview-controls-slider {
-    -webkit-appearance: none;
-    width: var(--slider-width);
-    height: var(--thumb-size);
-    background: transparent;
-    cursor: pointer;
-  }
-  #preview-controls-slider:focus {
-    outline: none;
-  }
-  /* Track */
-  #preview-controls-slider::-webkit-slider-runnable-track {
-    height: var(--track-height);
-    background: var(--track-bg);
-    border-radius: 999px;
-  }
-  #preview-controls-slider::-moz-range-track {
-    height: var(--track-height);
-    background: var(--track-bg);
-    border-radius: 999px;
-  }
-  /* Thumb */
-  #preview-controls-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: var(--slider-thumb);
-    height: var(--slider-thumb);
-    border-radius: 999px;
-    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-hover) 100%);
-    box-shadow: 0 4px 10px rgba(45,133,255,0.18), 0 1px 0 rgba(255,255,255,0.06) inset;
-    margin-top: calc((var(--track-height) * -1) / 2 + 1px);
-  }
-  #preview-controls-slider::-moz-range-thumb {
-    width: var(--slider-thumb);
-    height: var(--slider-thumb);
-    border-radius: 999px;
-    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-hover) 100%);
-    box-shadow: 0 4px 10px rgba(45,133,255,0.18), 0 1px 0 rgba(255,255,255,0.06) inset;
-  }
-
-  /* Fill track before thumb using background-size technique */
-  #preview-controls-slider[data-fill] {
-    background-image: linear-gradient(90deg, var(--accent) 0%, var(--accent) 100%);
-    background-repeat: no-repeat;
-  }
-
   .top-global-actions .tool-btn {
     min-height: 30px;
     padding: 4px 8px;
@@ -2064,6 +2004,41 @@ body {
     background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%);
     cursor: row-resize;
     touch-action: none;
+  }
+
+  /* Small, elegant three-dot drag hint shown at the preview-controls divider */
+  #preview-controls-divider .divider-hint {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    align-items: center;
+    margin-top: 6px;
+    pointer-events: none;
+  }
+
+  #preview-controls-divider .divider-hint .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+    box-shadow: 0 1px 1px rgba(0,0,0,0.5) inset;
+    opacity: 0.7;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+
+  #preview-controls-divider:hover .divider-hint .dot,
+  #preview-controls-divider.dragging .divider-hint .dot {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+
+  /* Touch devices: slightly larger dots */
+  @media (any-pointer: coarse) {
+    #preview-controls-divider .divider-hint .dot {
+      width: 8px;
+      height: 8px;
+      opacity: 0.85;
+    }
   }
 
   :root[data-ui-layout='controls-priority'] #controls {

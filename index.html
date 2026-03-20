@@ -79,10 +79,6 @@
           <span>Reset All</span>
         </button>
       </div>
-      <div class="preview-slider-wrapper" aria-hidden="false">
-        <label for="preview-controls-slider" class="preview-slider-label">Preview / Controls</label>
-        <input id="preview-controls-slider" type="range" min="38" max="84" step="1" value="66" aria-label="Adjust preview and controls ratio">
-      </div>
     </div>
 
     <!-- Error message -->
@@ -115,7 +111,13 @@
     </div>
 
     <div id="preview-controls-divider" aria-label="Resize preview and operations"
-      title="Drag to resize image and operation areas" role="separator" aria-orientation="horizontal"></div>
+      title="Drag to resize image and operation areas" role="separator" aria-orientation="horizontal">
+      <span class="divider-hint" aria-hidden="true">
+        <i class="dot"></i>
+        <i class="dot"></i>
+        <i class="dot"></i>
+      </span>
+    </div>
 
     <!-- Controls Sidebar -->
     <div id="controls">
