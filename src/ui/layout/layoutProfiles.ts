@@ -49,7 +49,6 @@ function normalizeMobileModule(value: unknown): MobileModule {
     || value === 'calibration'
     || value === 'mapping'
     || value === 'toning'
-    || value === 'layout'
     || value === 'history'
     || value === 'presets'
   ) {

@@ -251,6 +251,26 @@ body {
   color: var(--text-primary);
 }
 
+#layout-studio-entry-btn {
+  position: relative;
+  color: var(--text-dim);
+}
+
+#layout-studio-entry-btn::before {
+  content: 'DEV';
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  font-family: var(--text-mono);
+  font-size: 7px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #e7c078;
+}
+
 /* Shared glass finish for actionable controls */
 :where(.icon-btn, .primary-btn, .tool-btn, .small-btn, .layer-tab, .reset-module-btn, .collapsible-toggle, .mapping-item, .preset-item) {
   position: relative;
@@ -944,6 +964,36 @@ body {
   transform: none;
 }
 
+/* Make reset buttons visually match collapse buttons (square) */
+.reset-module-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.reset-module-btn svg {
+  width: 22px !important;
+  height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+}
+
+/* Ensure collapse button SVG matches reset icon sizing and alignment */
+.module-collapse-btn svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
 .history-panel-title {
   font-family: var(--text-mono);
   font-size: 9.5px;
@@ -1152,8 +1202,8 @@ body {
 }
 
 .reset-module-btn {
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1903,6 +1953,7 @@ body {
 
 .mobile-module-bar {
   display: none;
+  touch-action: pan-x;
 }
 
 .mobile-module-btn {
@@ -1982,7 +2033,6 @@ body {
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #layer-tabs,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheels-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #wheels-row,
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #layout-manager-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #history-panel,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #panels,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) #bottom-bar {
@@ -2094,7 +2144,7 @@ body {
     right: calc(8px + env(safe-area-inset-right, 0px));
     bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     display: none;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: center;
     gap: 4px;
     padding: 6px;
     border: 1px solid var(--border);
@@ -2102,21 +2152,43 @@ body {
     background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
     backdrop-filter: blur(10px) saturate(120%);
     z-index: 35;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
   }
 
   .mobile-module-btn {
+    flex: 0 0 auto;
     min-height: 32px;
+    min-width: 72px;
     font-size: 8.8px;
     letter-spacing: 0.3px;
-    padding: 0 4px;
+    padding: 0 10px;
   }
 
   .mobile-module-bar.active {
-    display: grid;
+    display: flex;
   }
 
   :root[data-ui-layout='image-priority'] #bottom-bar {
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    position: fixed;
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+    z-index: 34;
+    max-height: min(42dvh, 320px);
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+    padding: 8px;
+  }
+
+  :root[data-ui-layout='image-priority'] #bottom-bar #preset-section {
+    gap: 6px;
   }
 }
 
@@ -2265,6 +2337,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

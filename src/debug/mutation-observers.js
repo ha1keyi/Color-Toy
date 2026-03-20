@@ -65,7 +65,7 @@
       const b = prev[k];
       if (!a || !b) continue;
       if (a.position !== b.position) {
-        log(`${k} position changed`, b.position, '->', a.position, 'class=', (k==='controls'?controls.className:(k==='wheelBar'?wheelBar.className:wheelsRow.className)), 'inlineStyle=', (k==='controls'?controls.getAttribute('style'):(k==='wheelBar'?wheelBar.getAttribute('style'):wheelsRow.getAttribute('style'))));
+        log(`${k} position changed`, b.position, '->', a.position, 'class=', (k === 'controls' ? controls.className : (k === 'wheelBar' ? wheelBar.className : wheelsRow.className)), 'inlineStyle=', (k === 'controls' ? controls.getAttribute('style') : (k === 'wheelBar' ? wheelBar.getAttribute('style') : wheelsRow.getAttribute('style'))));
       }
     }
 

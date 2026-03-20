@@ -43,7 +43,7 @@ let dominantImageHues: number[] = [];
 type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'colorToy.theme';
 type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
-type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'layout' | 'history' | 'presets';
+type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history' | 'presets';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -214,6 +214,7 @@ function init(): void {
 
   // Setup UI event handlers
   setupThemeToggle();
+  setupLayoutStudioEntry();
   setupLayerTabs();
   setupToolbar();
   setupSplitDivider();
@@ -311,6 +312,20 @@ function setupThemeToggle(): void {
     const next: ThemeMode = current === 'dark' ? 'light' : 'dark';
     window.localStorage.setItem(THEME_STORAGE_KEY, next);
     applyTheme(next, btn);
+  });
+}
+
+function setupLayoutStudioEntry(): void {
+  const entryBtn = document.getElementById('layout-studio-entry-btn') as HTMLButtonElement | null;
+  if (!entryBtn) return;
+
+  entryBtn.addEventListener('click', () => {
+    entryBtn.classList.add('active');
+    entryBtn.setAttribute('aria-pressed', 'true');
+    window.setTimeout(() => {
+      entryBtn.classList.remove('active');
+      entryBtn.setAttribute('aria-pressed', 'false');
+    }, 140);
   });
 }
 
@@ -988,9 +1003,15 @@ function setupLayoutControls(): void {
 
   const layoutStored = window.localStorage.getItem(UI_LAYOUT_STORAGE_KEY);
 
-  const initialLayout: UiLayoutMode = isValidLayout(layoutStored || '')
+  let initialLayout: UiLayoutMode = isValidLayout(layoutStored || '')
     ? layoutStored as UiLayoutMode
     : 'controls-priority';
+
+  // On mobile compact view, always use image-priority and hide the toggle control
+  if (isMobileCompactViewport()) {
+    initialLayout = 'image-priority';
+    if (layoutToggleBtn) layoutToggleBtn.style.display = 'none';
+  }
 
   const controlsStored = parseFloat(window.localStorage.getItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}controls-priority`) || '');
   const imageStored = parseFloat(window.localStorage.getItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}image-priority`) || '');

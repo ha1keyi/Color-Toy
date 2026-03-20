@@ -39,16 +39,6 @@ describe('layoutProfiles helpers', () => {
     expect(profile.collapsedModules).toEqual({ a: true });
   });
 
-  it('keeps layout mobile module values when valid', () => {
-    const profile = normalizeLayoutProfile({
-      id: 'layout-id',
-      name: 'Layout Module',
-      mobileModuleSelection: 'layout',
-    }, 'fallback-id');
-
-    expect(profile.mobileModuleSelection).toBe('layout');
-  });
-
   it('serializes and parses profiles', () => {
     const json = serializeLayoutProfiles([createDefaultLayoutProfile()]);
     const parsed = parseLayoutProfilesFromJson(json);

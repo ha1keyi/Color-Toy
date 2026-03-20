@@ -22,7 +22,6 @@ describe('layoutState helpers', () => {
 
   it('validates mobile module names', () => {
     expect(isValidMobileModule('mapping')).toBe(true);
-    expect(isValidMobileModule('layout')).toBe(true);
     expect(isValidMobileModule('presets')).toBe(true);
     expect(isValidMobileModule('advanced')).toBe(false);
   });

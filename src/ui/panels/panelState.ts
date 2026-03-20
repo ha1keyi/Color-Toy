@@ -6,7 +6,7 @@ import {
   updateSlider,
 } from './panelControls';
 
-export type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'layout' | 'history' | 'presets';
+export type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history' | 'presets';
 
 interface PanelStateDeps {
   isImagePriorityMobileMode: () => boolean;
@@ -26,7 +26,6 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   const toningPanel = document.getElementById('toning-panel');
   const wheelsRow = document.getElementById('wheels-row');
   const historyPanel = document.getElementById('history-panel');
-  const layoutManagerPanel = document.getElementById('layout-manager-panel');
   const panels = document.getElementById('panels');
   const controls = document.getElementById('controls');
   const mobileBar = document.getElementById('mobile-module-bar');
@@ -67,22 +66,17 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     if (historyPanel) {
       historyPanel.style.display = deps.mobileModuleSelection === 'history' ? 'block' : 'none';
     }
-    if (layoutManagerPanel) {
-      layoutManagerPanel.style.display = deps.mobileModuleSelection === 'layout' ? 'block' : 'none';
-    }
 
     const layerSelection = deps.mobileModuleSelection === 'calibration'
       || deps.mobileModuleSelection === 'mapping'
       || deps.mobileModuleSelection === 'toning';
-    const auxSelection = deps.mobileModuleSelection === 'history'
-      || deps.mobileModuleSelection === 'layout';
     const presetsSelection = deps.mobileModuleSelection === 'presets';
     if (panels) {
       panels.style.display = layerSelection ? 'block' : 'none';
     }
 
     if (bottomBar) {
-      bottomBar.style.display = presetsSelection || auxSelection ? 'block' : 'none';
+      bottomBar.style.display = presetsSelection ? 'block' : 'none';
     }
     if (presetSection) {
       presetSection.style.display = presetsSelection ? 'flex' : 'none';
@@ -108,7 +102,6 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   } else {
     if (wheelsPanel) wheelsPanel.style.display = wheelsAvailableByLayer ? 'block' : 'none';
     if (historyPanel) historyPanel.style.display = 'block';
-    if (layoutManagerPanel) layoutManagerPanel.style.display = 'block';
     if (panels) panels.style.display = 'block';
     if (bottomBar) bottomBar.style.display = 'block';
     if (presetSection) presetSection.style.display = 'flex';

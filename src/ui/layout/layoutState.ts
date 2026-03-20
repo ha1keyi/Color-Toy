@@ -43,7 +43,6 @@ export function isValidMobileModule(value: string): value is MobileModule {
     || value === 'calibration'
     || value === 'mapping'
     || value === 'toning'
-    || value === 'layout'
     || value === 'history'
     || value === 'presets';
 }

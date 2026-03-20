@@ -43,6 +43,15 @@
           </svg>
           <span class="theme-toggle-label">Dark</span>
         </button>
+        <button id="layout-studio-entry-btn" class="icon-btn" type="button" title="Layout Studio (Hidden Feature)"
+          aria-label="Layout Studio hidden feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+        </button>
         <button id="export-btn" class="primary-btn">Export</button>
       </div>
     </header>
@@ -95,12 +104,14 @@
         <input type="file" id="image-input" accept="image/jpeg,image/png,image/webp" hidden>
       </div>
       <canvas id="gl-canvas" style="display:none"></canvas>
-      <div id="split-divider" style="display:none" aria-label="Split Divider" title="Drag to adjust split compare" role="separator" aria-orientation="vertical">
+      <div id="split-divider" style="display:none" aria-label="Split Divider" title="Drag to adjust split compare"
+        role="separator" aria-orientation="vertical">
         <span class="split-divider-handle"></span>
       </div>
     </div>
 
-    <div id="preview-controls-divider" aria-label="Resize preview and operations" title="Drag to resize image and operation areas" role="separator" aria-orientation="horizontal"></div>
+    <div id="preview-controls-divider" aria-label="Resize preview and operations"
+      title="Drag to resize image and operation areas" role="separator" aria-orientation="horizontal"></div>
 
     <!-- Controls Sidebar -->
     <div id="controls">
@@ -127,8 +138,11 @@
               <button id="wheel-compare-btn" class="small-btn" type="button">Compare: Left/Right</button>
               <button id="wheel-pin-btn" class="small-btn" type="button">Pin: Off</button>
               <button id="wheels-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="wheels-panel"
-                aria-controls="wheels-row" title="Collapse wheels">▾</button>
+                data-collapse-target="wheels-panel" aria-controls="wheels-row" title="Collapse wheels">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                </svg>
+              </button>
             </div>
           </div>
           <div id="wheels-row">
@@ -152,13 +166,18 @@
           <div class="panel-header">
             <h3 class="panel-title">Calibration</h3>
             <div class="panel-header-actions">
-              <button id="calibration-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="calibration-panel"
-                aria-controls="calibration-panel" title="Collapse calibration">▾</button>
-              <button class="reset-module-btn" data-module="calibration" title="Reset Calibration">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <button class="reset-module-btn small-btn" data-module="calibration" title="Reset Calibration"
+                aria-label="Reset Calibration">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M1 4v6h6" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+              <button id="calibration-collapse-btn" class="small-btn module-collapse-btn" type="button"
+                aria-expanded="true" data-collapse-target="calibration-panel" aria-controls="calibration-panel"
+                title="Collapse calibration">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
                 </svg>
               </button>
             </div>
@@ -219,9 +238,13 @@
           <div class="panel-header">
             <h3 class="panel-title">xy Chromaticity</h3>
             <div class="panel-header-actions">
-              <button id="xy-panel-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="xy-panel"
-                aria-controls="xy-panel" title="Collapse xy chromaticity">▾</button>
+              <button id="xy-panel-collapse-btn" class="small-btn module-collapse-btn" type="button"
+                aria-expanded="true" data-collapse-target="xy-panel" aria-controls="xy-panel"
+                title="Collapse xy chromaticity">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -277,13 +300,17 @@
           <div class="panel-header">
             <h3 class="panel-title">Hue Mapping</h3>
             <div class="panel-header-actions">
-              <button id="mapping-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="mapping-panel"
-                aria-controls="mapping-panel" title="Collapse hue mapping">▾</button>
-              <button class="reset-module-btn" data-module="mapping" title="Reset Hue Mapping">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <button class="reset-module-btn small-btn" data-module="mapping" title="Reset Hue Mapping"
+                aria-label="Reset Hue Mapping">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M1 4v6h6" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+              <button id="mapping-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+                data-collapse-target="mapping-panel" aria-controls="mapping-panel" title="Collapse hue mapping">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
                 </svg>
               </button>
             </div>
@@ -336,13 +363,17 @@
           <div class="panel-header">
             <h3 class="panel-title">Toning</h3>
             <div class="panel-header-actions">
-              <button id="toning-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="toning-panel"
-                aria-controls="toning-panel" title="Collapse toning">▾</button>
-              <button class="reset-module-btn" data-module="toning" title="Reset Toning">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <button class="reset-module-btn small-btn" data-module="toning" title="Reset Toning"
+                aria-label="Reset Toning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M1 4v6h6" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+              <button id="toning-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
+                data-collapse-target="toning-panel" aria-controls="toning-panel" title="Collapse toning">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
                 </svg>
               </button>
             </div>
@@ -407,65 +438,34 @@
         </div>
       </div>
 
-    </div>
-
-    <nav id="mobile-module-bar" aria-label="Mobile Operations" class="mobile-module-bar">
-      <button class="mobile-module-btn" data-mobile-module="calibration" type="button">Calibration</button>
-      <button class="mobile-module-btn" data-mobile-module="mapping" type="button">Hue Map</button>
-      <button class="mobile-module-btn" data-mobile-module="toning" type="button">Toning</button>
-      <button class="mobile-module-btn" data-mobile-module="layout" type="button">Layout</button>
-      <button class="mobile-module-btn" data-mobile-module="history" type="button">History</button>
-      <button class="mobile-module-btn" data-mobile-module="presets" type="button">Presets</button>
-    </nav>
-
-    <!-- Bottom Bar -->
-    <div id="bottom-bar">
-      <section id="layout-manager-panel" class="panel" aria-label="Layout Manager">
-        <div class="panel-header">
-          <h3 class="panel-title">Layout Studio</h3>
-          <div class="panel-header-actions">
-            <button id="layout-manager-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-              data-collapse-target="layout-manager-panel"
-              aria-controls="layout-manager-panel" title="Collapse layout manager">▾</button>
-          </div>
-        </div>
-        <div class="layout-manager-content">
-          <div class="layout-control-item">
-            <span>Profile</span>
-            <select id="layout-profile-select" aria-label="Layout profile"></select>
-          </div>
-          <div class="layout-manager-list-wrap">
-            <span class="layout-manager-list-label">Drag To Reorder</span>
-            <ul id="layout-profile-list" class="layout-profile-list" aria-label="Layout profile order"></ul>
-          </div>
-          <div class="layout-manager-actions">
-            <button id="layout-save-current-btn" class="small-btn" type="button">Save Current</button>
-            <button id="layout-save-as-btn" class="small-btn" type="button">Save As</button>
-            <button id="layout-rename-btn" class="small-btn" type="button">Rename</button>
-            <button id="layout-delete-btn" class="small-btn danger" type="button">Delete</button>
-            <button id="layout-default-lock-btn" class="small-btn" type="button">Lock As Default</button>
-            <button id="layout-rollback-btn" class="small-btn" type="button">Rollback Last</button>
-            <button id="layout-export-btn" class="small-btn" type="button">Export</button>
-            <button id="layout-import-btn" class="small-btn" type="button">Import</button>
-            <input id="layout-import-input" type="file" accept="application/json" hidden>
-          </div>
-          <div id="layout-manager-status" class="layout-manager-status" aria-live="polite">Ready</div>
-        </div>
-      </section>
-
       <section id="history-panel" aria-label="Edit History">
         <div class="history-panel-header">
           <h3 class="history-panel-title">History</h3>
           <div class="history-panel-actions">
             <span id="history-panel-status" class="history-panel-status">0 / 0</span>
             <button id="history-collapse-btn" class="small-btn module-collapse-btn" type="button" aria-expanded="true"
-              data-collapse-target="history-panel"
-              aria-controls="history-list" title="Collapse history">▾</button>
+              data-collapse-target="history-panel" aria-controls="history-list" title="Collapse history">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+              </svg>
+            </button>
           </div>
         </div>
         <div id="history-list" class="history-list"></div>
       </section>
 
+    </div>
+
+    <nav id="mobile-module-bar" aria-label="Mobile Operations" class="mobile-module-bar">
+      <button class="mobile-module-btn" data-mobile-module="calibration" type="button">Calibration</button>
+      <button class="mobile-module-btn" data-mobile-module="mapping" type="button">Hue Map</button>
+      <button class="mobile-module-btn" data-mobile-module="toning" type="button">Toning</button>
+      <button class="mobile-module-btn" data-mobile-module="history" type="button">History</button>
+      <button class="mobile-module-btn" data-mobile-module="presets" type="button">Presets</button>
+    </nav>
+
+    <!-- Bottom Bar -->
+    <div id="bottom-bar">
       <div id="preset-section">
         <div id="preset-list" class="preset-list"></div>
         <div class="preset-actions">
