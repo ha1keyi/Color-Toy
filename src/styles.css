@@ -2004,6 +2004,9 @@ body {
 @media (max-width: 767px) {
   :root {
     --header-height: 52px;
+    --mobile-primary-bar-height: 52px;
+    --mobile-primary-bar-gap: 12px;
+    --mobile-overlay-bottom: calc(var(--mobile-primary-bar-height) + var(--mobile-primary-bar-gap) + env(safe-area-inset-bottom, 0px));
   }
 
   #top-control-bar {
@@ -2231,7 +2234,8 @@ body {
     display: none;
     align-items: center;
     gap: 4px;
-    padding: 6px;
+    min-height: var(--mobile-primary-bar-height);
+    padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background: linear-gradient(180deg, rgba(7, 8, 10, 0.96), rgba(8, 10, 14, 0.92));
@@ -2248,9 +2252,9 @@ body {
 
   .mobile-module-btn {
     flex: 0 0 auto;
-    min-height: 32px;
+    min-height: 36px;
     min-width: 72px;
-    font-size: 8.8px;
+    font-size: 9.5px;
     letter-spacing: 0.3px;
     padding: 0 10px;
   }
@@ -2271,6 +2275,10 @@ body {
     margin-bottom: 6px;
     -webkit-overflow-scrolling: touch;
     border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    backdrop-filter: blur(8px);
   }
 
   .calibration-tabs {
@@ -2333,7 +2341,7 @@ body {
     position: fixed;
     left: calc(10px + env(safe-area-inset-left, 0px));
     right: calc(10px + env(safe-area-inset-right, 0px));
-    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--mobile-overlay-bottom);
     z-index: 34;
     margin: 0;
     max-height: 46dvh;
@@ -2418,7 +2426,7 @@ body {
     position: fixed;
     left: calc(10px + env(safe-area-inset-left, 0px));
     right: calc(10px + env(safe-area-inset-right, 0px));
-    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--mobile-overlay-bottom);
     z-index: 34;
     max-height: min(46dvh, 360px);
     overflow-y: auto;
@@ -2441,7 +2449,7 @@ body {
     position: fixed;
     left: calc(10px + env(safe-area-inset-left, 0px));
     right: calc(10px + env(safe-area-inset-right, 0px));
-    bottom: calc(164px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--mobile-overlay-bottom) + 52px);
     max-height: 34dvh;
     z-index: 35;
     background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
@@ -2456,7 +2464,7 @@ body {
     position: fixed;
     left: calc(10px + env(safe-area-inset-left, 0px));
     right: calc(10px + env(safe-area-inset-right, 0px));
-    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--mobile-overlay-bottom);
     z-index: 35;
     display: flex;
     gap: 8px;
@@ -2472,7 +2480,7 @@ body {
     position: fixed;
     left: calc(10px + env(safe-area-inset-left, 0px));
     right: calc(10px + env(safe-area-inset-right, 0px));
-    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--mobile-overlay-bottom);
     z-index: 34;
     background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
     border: 1px solid var(--border);
@@ -2494,7 +2502,7 @@ body {
     position: fixed;
     left: calc(8px + env(safe-area-inset-left, 0px));
     right: calc(8px + env(safe-area-inset-right, 0px));
-    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    bottom: var(--mobile-overlay-bottom);
     z-index: 34;
     max-height: min(42dvh, 320px);
     overflow-y: auto;
@@ -2503,6 +2511,10 @@ body {
     background: linear-gradient(180deg, rgba(6, 7, 10, 0.95), rgba(7, 8, 12, 0.92));
     box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     padding: 8px;
+  }
+
+  :root[data-ui-layout='image-priority'] #bottom-bar {
+    display: none;
   }
 
   :root[data-ui-layout='image-priority'] #bottom-bar #color-management-panel {

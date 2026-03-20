@@ -1129,6 +1129,15 @@ function applyPreviewControlsSplit(state: AppState): void {
   }
 
   const layoutMode = getCurrentLayoutMode();
+  const autoOverlayMode = layoutMode === 'image-priority' && !_previewControlsManuallyResized;
+  if (autoOverlayMode) {
+    app.style.setProperty('--preview-controls-ratio', '1');
+    app.style.setProperty('--controls-flex-ratio', '0');
+    controls.classList.remove('full-preview');
+    divider.classList.remove('active');
+    return;
+  }
+
   const imagePriorityModuleOpen = layoutMode === 'image-priority' && _mobileModuleSelection !== 'none';
   const storedRatio = layoutMode === 'image-priority'
     ? state.ui.imagePriorityPreviewRatio
