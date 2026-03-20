@@ -6,7 +6,7 @@ import {
   updateSlider,
 } from './panelControls';
 
-export type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history' | 'presets';
+export type MobileModule = 'none' | 'wheels' | 'calibration' | 'mapping' | 'toning' | 'color-management' | 'history' | 'presets';
 
 interface PanelStateDeps {
   isImagePriorityMobileMode: () => boolean;
@@ -33,7 +33,7 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   const presetSection = document.getElementById('preset-section');
   const capabilities = document.getElementById('capabilities');
 
-  const wheelsAvailableByLayer = state.ui.activeLayer !== 'toning';
+  const wheelsAvailableByLayer = state.ui.activeLayer !== 'toning' || deps.mobileModuleSelection === 'wheels';
   const calibrationActive = state.ui.activeLayer === 'calibration';
 
   if (wheelsPanel) wheelsPanel.style.display = wheelsAvailableByLayer ? 'block' : 'none';
@@ -67,26 +67,33 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
       historyPanel.style.display = deps.mobileModuleSelection === 'history' ? 'block' : 'none';
     }
 
-    const layerSelection = deps.mobileModuleSelection === 'calibration'
+    const layerSelection = deps.mobileModuleSelection === 'wheels'
+      || deps.mobileModuleSelection === 'calibration'
       || deps.mobileModuleSelection === 'mapping'
       || deps.mobileModuleSelection === 'toning';
     const presetsSelection = deps.mobileModuleSelection === 'presets';
+    const colorManagementSelection = deps.mobileModuleSelection === 'color-management';
     if (panels) {
       panels.style.display = layerSelection ? 'block' : 'none';
     }
 
     if (bottomBar) {
-      bottomBar.style.display = presetsSelection ? 'block' : 'none';
+      bottomBar.style.display = (presetsSelection || colorManagementSelection) ? 'block' : 'none';
     }
     if (presetSection) {
       presetSection.style.display = presetsSelection ? 'flex' : 'none';
     }
     if (capabilities) {
-      capabilities.style.display = presetsSelection ? 'block' : 'none';
+      capabilities.style.display = (presetsSelection || colorManagementSelection) ? 'block' : 'none';
+    }
+
+    const colorManagementPanel = document.getElementById('color-management-panel');
+    if (colorManagementPanel) {
+      colorManagementPanel.style.display = colorManagementSelection ? 'block' : 'none';
     }
 
     if (wheelsPanel) {
-      const wheelsSelection = deps.mobileModuleSelection === 'calibration' || deps.mobileModuleSelection === 'mapping';
+      const wheelsSelection = deps.mobileModuleSelection === 'wheels';
       wheelsPanel.style.display = wheelsSelection ? 'block' : 'none';
     }
     if (calibrationPanel) calibrationPanel.style.display = deps.mobileModuleSelection === 'calibration' ? 'block' : 'none';
@@ -95,7 +102,7 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     if (toningPanel) toningPanel.style.display = deps.mobileModuleSelection === 'toning' ? 'block' : 'none';
 
     if (wheelsRow) {
-      const shouldShowWheels = deps.mobileModuleSelection === 'calibration' || deps.mobileModuleSelection === 'mapping';
+      const shouldShowWheels = deps.mobileModuleSelection === 'wheels';
       const wheelsCollapsed = wheelsPanel?.classList.contains('is-collapsed') ?? false;
       wheelsRow.style.display = shouldShowWheels && !wheelsCollapsed ? 'flex' : 'none';
     }
@@ -106,6 +113,8 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     if (bottomBar) bottomBar.style.display = 'block';
     if (presetSection) presetSection.style.display = 'flex';
     if (capabilities) capabilities.style.display = 'block';
+    const colorManagementPanel = document.getElementById('color-management-panel');
+    if (colorManagementPanel) colorManagementPanel.style.display = 'block';
   }
 
   if (wheelsRow && !imagePriorityMobile) {

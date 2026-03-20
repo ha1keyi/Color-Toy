@@ -855,13 +855,13 @@ body {
 }
 
 #wheels-row.wheels-compare-inside .wheel-col:first-child {
-  z-index: 3;
+  z-index: 1;
   width: auto;
   max-width: none;
 }
 
 #wheels-row.wheels-compare-inside .wheel-col:last-child {
-  z-index: 1;
+  z-index: 3;
   width: auto;
   max-width: none;
 }
@@ -881,22 +881,23 @@ body {
 }
 
 #wheels-row.wheels-compare-inside #wheel-container {
-  z-index: 3;
+  z-index: 1;
   width: clamp(106px, 30vw, 132px);
 }
 
 #wheels-row.wheels-compare-inside #rendered-wheel-container {
-  z-index: 1;
+  z-index: 3;
   width: clamp(164px, 52vw, 214px);
 }
 
 #wheels-row.wheels-compare-inside #wheel-canvas {
   opacity: 1;
-  filter: drop-shadow(0 1px 5px rgba(0, 0, 0, 0.42));
+  filter: none;
 }
 
 #wheels-row.wheels-compare-inside #rendered-wheel-canvas {
   opacity: 1;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.35));
 }
 
 #history-panel,
@@ -1972,6 +1973,34 @@ body {
   border-color: rgba(45, 133, 255, 0.34);
 }
 
+.mobile-submodule-tabs {
+  display: none;
+}
+
+.wheels-dock-btn {
+  display: none;
+  position: absolute;
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  color: var(--text-secondary);
+  align-items: center;
+  justify-content: center;
+  z-index: 36;
+  backdrop-filter: blur(8px) saturate(120%);
+  box-shadow: var(--shadow-sm);
+}
+
+.wheels-dock-btn.active {
+  border-color: var(--border-glow);
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+
 @media (max-width: 767px) {
   :root {
     --header-height: 52px;
@@ -2052,6 +2081,29 @@ body {
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-open {
     min-height: 33dvh;
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open {
+    flex: 0 0 0 !important;
+    min-height: 0 !important;
+    border-top: none;
+    padding-bottom: 0;
+    overflow: visible;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open #panels,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open #history-panel,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open #bottom-bar,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open #wheels-panel,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open #xy-panel,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open .mobile-submodule-tabs,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open .submodule-tab,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open .small-btn,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open .module-collapse-btn,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.image-priority-mode.module-open .reset-module-btn {
+    pointer-events: auto;
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-open) {
@@ -2182,8 +2234,10 @@ body {
     padding: 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
-    backdrop-filter: blur(10px) saturate(120%);
+    background: linear-gradient(180deg, rgba(7, 8, 10, 0.96), rgba(8, 10, 14, 0.92));
+    border-color: rgba(255, 255, 255, 0.11);
+    backdrop-filter: blur(12px) saturate(130%);
+    box-shadow: 0 -10px 22px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     z-index: 35;
     overflow-x: auto;
     overflow-y: hidden;
@@ -2205,19 +2259,256 @@ body {
     display: flex;
   }
 
+  .wheels-dock-btn {
+    display: inline-flex;
+  }
+
+  .mobile-submodule-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 2px 8px;
+    margin-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .calibration-tabs {
+    background: linear-gradient(90deg, rgba(51, 102, 214, 0.08), transparent);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+  }
+
+  .mapping-mode-tabs {
+    background: linear-gradient(90deg, rgba(199, 70, 232, 0.08), transparent);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+  }
+
+  .toning-tabs {
+    background: linear-gradient(90deg, rgba(255, 120, 74, 0.08), transparent);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+  }
+
+  .mobile-submodule-tabs .submodule-tab {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-glass);
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.2px;
+  }
+
+  .mobile-submodule-tabs .submodule-tab.active {
+    color: var(--text-primary);
+    border-color: rgba(45, 133, 255, 0.4);
+    background: var(--accent-dim);
+  }
+
+  /* Calibration: show only one primary channel at a time on mobile */
+  #calibration-panel .cal-channel {
+    display: none;
+  }
+
+  #calibration-panel[data-cal-primary='none'] .cal-channel {
+    display: none;
+  }
+
+  #calibration-panel[data-cal-primary='red'] .cal-channel[data-cal-primary='red'],
+  #calibration-panel[data-cal-primary='green'] .cal-channel[data-cal-primary='green'],
+  #calibration-panel[data-cal-primary='blue'] .cal-channel[data-cal-primary='blue'] {
+    display: block;
+  }
+
+  #xy-panel {
+    display: none !important;
+  }
+
+  #calibration-panel[data-cal-primary='xy'] ~ #xy-panel {
+    display: block !important;
+    position: fixed;
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    z-index: 34;
+    margin: 0;
+    max-height: 46dvh;
+    overflow-y: auto;
+    background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(12px) saturate(130%);
+    box-shadow: var(--shadow-lg);
+  }
+
+  #calibration-panel[data-cal-primary='xy'] ~ #xy-panel .panel-header {
+    display: none;
+  }
+
+  /* Hue Map: mode-driven minimal surfaces */
+  #mapping-panel[data-mapping-mode='global'] .mapping-point-group,
+  #mapping-panel[data-mapping-mode='global'] .mapping-picker-group {
+    display: none;
+  }
+
+  #mapping-panel[data-mapping-mode='point'] .mapping-global-row,
+  #mapping-panel[data-mapping-mode='point'] .mapping-picker-group {
+    display: none;
+  }
+
+  #mapping-panel[data-mapping-mode='picker'] .mapping-global-row,
+  #mapping-panel[data-mapping-mode='picker'] .mapping-point-group {
+    display: none;
+  }
+
+  #mapping-detail .mapping-control-row {
+    display: none;
+  }
+
+  #mapping-panel[data-mapping-control='src'] #mapping-detail .mapping-control-row[data-mapping-control='src'],
+  #mapping-panel[data-mapping-control='dst'] #mapping-detail .mapping-control-row[data-mapping-control='dst'],
+  #mapping-panel[data-mapping-control='range'] #mapping-detail .mapping-control-row[data-mapping-control='range'],
+  #mapping-panel[data-mapping-control='strength'] #mapping-detail .mapping-control-row[data-mapping-control='strength'] {
+    display: flex;
+  }
+
+  /* Toning: one primary slider at a time; curve mode can expand */
+  #toning-panel .toning-slider-row {
+    display: none;
+  }
+
+  #toning-panel[data-toning-control='exposure'] .toning-slider-row[data-toning-control='exposure'],
+  #toning-panel[data-toning-control='contrast'] .toning-slider-row[data-toning-control='contrast'],
+  #toning-panel[data-toning-control='highlights'] .toning-slider-row[data-toning-control='highlights'],
+  #toning-panel[data-toning-control='shadows'] .toning-slider-row[data-toning-control='shadows'],
+  #toning-panel[data-toning-control='whites'] .toning-slider-row[data-toning-control='whites'],
+  #toning-panel[data-toning-control='blacks'] .toning-slider-row[data-toning-control='blacks'] {
+    display: flex;
+  }
+
+  #toning-panel[data-toning-control='curve'] .toning-slider-row,
+  #toning-panel[data-toning-control='curve'] #histogram-container,
+  #toning-panel[data-toning-control='curve'] .tone-curve-controls {
+    display: block;
+  }
+
+  #toning-panel[data-toning-control='curve'] .tone-curve-controls {
+    display: flex;
+  }
+
+  #toning-panel[data-toning-control='curve'] #color-management-panel {
+    display: none;
+  }
+
+  #toning-panel:not([data-toning-control='curve']) #tone-curve-container,
+  #toning-panel:not([data-toning-control='curve']) .tone-curve-controls,
+  #toning-panel:not([data-toning-control='curve']) #histogram-container {
+    display: none;
+  }
+
+  /* Auto overlay for heavy controls when user has not manually resized split */
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-calibration #panels,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-mapping #panels,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-toning #panels,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-history #history-panel {
+    position: fixed;
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    z-index: 34;
+    max-height: min(46dvh, 360px);
+    overflow-y: auto;
+    background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(12px) saturate(130%);
+    box-shadow: var(--shadow-lg);
+    padding: 8px;
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-calibration #panels > .panel,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-mapping #panels > .panel,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-toning #panels > .panel {
+    margin: 0;
+    width: 100%;
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-toning #toning-panel[data-toning-control='curve'] #tone-curve-container {
+    position: fixed;
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: calc(164px + env(safe-area-inset-bottom, 0px));
+    max-height: 34dvh;
+    z-index: 35;
+    background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 8px;
+    backdrop-filter: blur(12px) saturate(130%);
+    box-shadow: var(--shadow-lg);
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-toning #toning-panel[data-toning-control='curve'] .tone-curve-controls {
+    position: fixed;
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    z-index: 35;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, rgba(10, 12, 18, 0.82), rgba(10, 12, 18, 0.74));
+    backdrop-filter: blur(14px) saturate(130%);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-wheels #wheels-panel {
+    position: fixed;
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    z-index: 34;
+    background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(12px) saturate(130%);
+    box-shadow: var(--shadow-lg);
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.module-wheels #wheels-panel .panel-header {
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.module-wheels #wheels-row {
+    min-height: 146px;
+  }
+
   :root[data-ui-layout='image-priority'] #bottom-bar {
     position: fixed;
     left: calc(8px + env(safe-area-inset-left, 0px));
     right: calc(8px + env(safe-area-inset-right, 0px));
-    bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
     z-index: 34;
     max-height: min(42dvh, 320px);
     overflow-y: auto;
-    border: 1px solid var(--border);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+    background: linear-gradient(180deg, rgba(6, 7, 10, 0.95), rgba(7, 8, 12, 0.92));
+    box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     padding: 8px;
+  }
+
+  :root[data-ui-layout='image-priority'] #bottom-bar #color-management-panel {
+    margin-top: 2px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
   }
 
   :root[data-ui-layout='image-priority'] #bottom-bar #preset-section {

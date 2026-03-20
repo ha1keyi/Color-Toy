@@ -25,9 +25,7 @@ export function getCurrentLayoutMode(): UiLayoutMode {
 
 export function isWheelStickyContext(mobileModuleSelection: MobileModule): boolean {
   return isImagePriorityMobileMode()
-    && (mobileModuleSelection === 'calibration'
-      || mobileModuleSelection === 'mapping'
-      || mobileModuleSelection === 'toning');
+    && mobileModuleSelection === 'wheels';
 }
 
 export function clampPreviewRatio(value: number): number {
@@ -40,9 +38,11 @@ export function isValidLayout(value: string): value is UiLayoutMode {
 
 export function isValidMobileModule(value: string): value is MobileModule {
   return value === 'none'
+    || value === 'wheels'
     || value === 'calibration'
     || value === 'mapping'
     || value === 'toning'
+    || value === 'color-management'
     || value === 'history'
     || value === 'presets';
 }

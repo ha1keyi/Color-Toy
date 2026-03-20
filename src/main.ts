@@ -43,7 +43,7 @@ let dominantImageHues: number[] = [];
 type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'colorToy.theme';
 type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
-type MobileModule = 'none' | 'calibration' | 'mapping' | 'toning' | 'history' | 'presets';
+type MobileModule = 'none' | 'wheels' | 'calibration' | 'mapping' | 'toning' | 'color-management' | 'history' | 'presets';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -80,6 +80,11 @@ const UI_LAYOUT_STORAGE_KEY = 'colorToy.ui.layout';
 const MODULE_COLLAPSE_STORAGE_PREFIX = 'colorToy.ui.collapsed.';
 const PREVIEW_SPLIT_STORAGE_PREFIX = 'colorToy.ui.previewSplit.';
 let _mobileModuleSelection: MobileModule = 'none';
+let _mobileCalibrationPrimary: 'none' | 'xy' | 'red' | 'green' | 'blue' = 'none';
+let _mobileMappingMode: 'global' | 'point' | 'picker' = 'global';
+let _mobileMappingControl: 'src' | 'dst' | 'range' | 'strength' = 'src';
+let _mobileToningControl: 'contrast' | 'exposure' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'curve' = 'contrast';
+let _previewControlsManuallyResized = false;
 
 function isCoarsePointerDevice(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
@@ -225,6 +230,8 @@ function init(): void {
   setupWheelControls();
   setupPreviewControlsDivider();
   setupMobileModuleBar();
+  setupMobileSubmoduleControls();
+  setupWheelsDock();
   setupLayoutProfileControls();
   setupPresets();
   setupExport();
@@ -873,6 +880,7 @@ function setupSplitDivider(): void {
   divider.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
+    _previewControlsManuallyResized = true;
     dragging = true;
     activePointerId = e.pointerId;
     divider.setPointerCapture(e.pointerId);
@@ -1210,6 +1218,17 @@ function setupMobileModuleBar(): void {
             activeLayer: _mobileModuleSelection,
           },
         });
+
+        if (_mobileModuleSelection === 'calibration') {
+          _mobileCalibrationPrimary = 'none';
+        }
+        if (_mobileModuleSelection === 'mapping') {
+          _mobileMappingMode = 'global';
+          _mobileMappingControl = 'src';
+        }
+        if (_mobileModuleSelection === 'toning') {
+          _mobileToningControl = 'contrast';
+        }
       }
 
       if (_mobileModuleSelection === 'none') {
@@ -1232,6 +1251,66 @@ function setupMobileModuleBar(): void {
   syncMobileModuleBarSelection();
   window.addEventListener('resize', () => {
     updatePanelUI(store.getState());
+  });
+}
+
+function setupWheelsDock(): void {
+  const dockBtn = document.getElementById('wheels-dock-btn') as HTMLButtonElement | null;
+  if (!dockBtn) return;
+
+  dockBtn.addEventListener('click', () => {
+    if (!isMobileCompactViewport() || getCurrentLayoutMode() !== 'image-priority') return;
+
+    const next: MobileModule = _mobileModuleSelection === 'wheels' ? 'none' : 'wheels';
+    setMobileModuleSelection(next);
+    updatePanelUI(store.getState());
+    handleResize();
+  });
+}
+
+function setupMobileSubmoduleControls(): void {
+  const calibrationTabs = Array.from(document.querySelectorAll('#calibration-primary-tabs [data-cal-primary]')) as HTMLButtonElement[];
+  calibrationTabs.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const next = btn.dataset.calPrimary;
+      if (next === 'none' || next === 'xy' || next === 'red' || next === 'green' || next === 'blue') {
+        _mobileCalibrationPrimary = next;
+        updatePanelUI(store.getState());
+      }
+    });
+  });
+
+  const mappingModeTabs = Array.from(document.querySelectorAll('#mapping-mode-tabs [data-mapping-mode]')) as HTMLButtonElement[];
+  mappingModeTabs.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const next = btn.dataset.mappingMode;
+      if (next === 'global' || next === 'point' || next === 'picker') {
+        _mobileMappingMode = next;
+        updatePanelUI(store.getState());
+      }
+    });
+  });
+
+  const mappingControlTabs = Array.from(document.querySelectorAll('#mapping-control-tabs [data-mapping-control]')) as HTMLButtonElement[];
+  mappingControlTabs.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const next = btn.dataset.mappingControl;
+      if (next === 'src' || next === 'dst' || next === 'range' || next === 'strength') {
+        _mobileMappingControl = next;
+        updatePanelUI(store.getState());
+      }
+    });
+  });
+
+  const toningTabs = Array.from(document.querySelectorAll('#toning-control-tabs [data-toning-control]')) as HTMLButtonElement[];
+  toningTabs.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const next = btn.dataset.toningControl;
+      if (next === 'contrast' || next === 'exposure' || next === 'highlights' || next === 'shadows' || next === 'whites' || next === 'blacks' || next === 'curve') {
+        _mobileToningControl = next;
+        updatePanelUI(store.getState());
+      }
+    });
   });
 }
 
@@ -2704,6 +2783,52 @@ function updatePanelUI(state: AppState): void {
     updateSplitDividerUI,
     updateToneCurveControlUI,
   });
+
+  const app = document.getElementById('app');
+  const controls = document.getElementById('controls');
+  const calibrationPanel = document.getElementById('calibration-panel');
+  const mappingPanel = document.getElementById('mapping-panel');
+  const toningPanel = document.getElementById('toning-panel');
+  const dockBtn = document.getElementById('wheels-dock-btn') as HTMLButtonElement | null;
+
+  if (calibrationPanel) calibrationPanel.setAttribute('data-cal-primary', _mobileCalibrationPrimary);
+  if (mappingPanel) {
+    mappingPanel.setAttribute('data-mapping-mode', _mobileMappingMode);
+    mappingPanel.setAttribute('data-mapping-control', _mobileMappingControl);
+  }
+  if (toningPanel) toningPanel.setAttribute('data-toning-control', _mobileToningControl);
+
+  const syncActive = (selector: string, key: string, value: string) => {
+    document.querySelectorAll(selector).forEach((el) => {
+      const btn = el as HTMLElement;
+      btn.classList.toggle('active', btn.dataset[key] === value);
+    });
+  };
+
+  syncActive('#calibration-primary-tabs [data-cal-primary]', 'calPrimary', _mobileCalibrationPrimary);
+  syncActive('#mapping-mode-tabs [data-mapping-mode]', 'mappingMode', _mobileMappingMode);
+  syncActive('#mapping-control-tabs [data-mapping-control]', 'mappingControl', _mobileMappingControl);
+  syncActive('#toning-control-tabs [data-toning-control]', 'toningControl', _mobileToningControl);
+
+  const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  const autoOverlay = imagePriorityMobile && !_previewControlsManuallyResized;
+
+  if (app) app.classList.toggle('auto-overlay-mode', autoOverlay);
+
+  if (controls) {
+    controls.classList.toggle('module-calibration', _mobileModuleSelection === 'calibration');
+    controls.classList.toggle('module-mapping', _mobileModuleSelection === 'mapping');
+    controls.classList.toggle('module-toning', _mobileModuleSelection === 'toning');
+    controls.classList.toggle('module-color-management', _mobileModuleSelection === 'color-management');
+    controls.classList.toggle('module-wheels', _mobileModuleSelection === 'wheels');
+  }
+
+  if (dockBtn) {
+    const shouldShowDock = imagePriorityMobile;
+    dockBtn.style.display = shouldShowDock ? 'inline-flex' : 'none';
+    dockBtn.classList.toggle('active', _mobileModuleSelection === 'wheels');
+    dockBtn.title = _mobileModuleSelection === 'wheels' ? 'Hide Wheels' : 'Show Wheels';
+  }
 }
 
 function updateCapabilitiesDisplay(): void {
