@@ -946,18 +946,28 @@ body {
   height: 30px;
   min-height: 30px;
   padding: 0;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
+  color: var(--text-dim);
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .module-collapse-btn:hover {
+  background: rgba(38, 44, 53, 0.76);
+  color: var(--text-secondary);
+  border-color: var(--border-light);
   transform: translateY(-1px);
+}
+
+.module-collapse-btn:active {
+  transform: scale(0.94);
+  color: var(--accent);
 }
 
 .module-collapse-btn.is-collapsed {
@@ -966,25 +976,39 @@ body {
 
 /* Make reset buttons visually match collapse buttons (square) */
 .reset-module-btn {
-  width: 22px;
-  height: 22px;
-  display: flex;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   color: var(--text-dim);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
   flex-shrink: 0;
 }
 
 .reset-module-btn svg {
-  width: 22px !important;
-  height: 22px !important;
-  max-width: 22px !important;
-  max-height: 22px !important;
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.reset-module-btn:hover {
+  background: rgba(38, 44, 53, 0.76);
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+  transform: translateY(-1px);
+}
+
+.reset-module-btn:active {
+  transform: scale(0.94);
+  color: var(--accent);
 }
 
 /* Ensure collapse button SVG matches reset icon sizing and alignment */
@@ -1199,32 +1223,6 @@ body {
   margin-bottom: 6px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
-}
-
-.reset-module-btn {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-glass);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.reset-module-btn:hover {
-  background: rgba(38, 44, 53, 0.76);
-  color: var(--text-secondary);
-  border-color: var(--border-light);
-}
-
-.reset-module-btn:active {
-  transform: scale(0.88);
-  color: var(--accent);
 }
 
 /* ============ Slider Rows ============ */
@@ -2199,12 +2197,14 @@ body {
   .small-btn,
   .layer-tab,
   .primary-btn,
+  .reset-module-btn,
   .module-collapse-btn,
   .layout-control-item select {
     min-height: 34px;
   }
 
   .icon-btn,
+  .reset-module-btn,
   .module-collapse-btn {
     min-width: 34px;
   }
