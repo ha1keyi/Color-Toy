@@ -18,6 +18,19 @@ interface PanelStateDeps {
   updateToneCurveControlUI: (state: AppState) => void;
 }
 
+function forceExpanded(panelId: string, collapseBtnId: string): void {
+  const panel = document.getElementById(panelId);
+  const collapseBtn = document.getElementById(collapseBtnId) as HTMLButtonElement | null;
+  if (panel?.classList.contains('is-collapsed')) {
+    panel.classList.remove('is-collapsed');
+  }
+  if (collapseBtn) {
+    collapseBtn.classList.remove('is-collapsed');
+    collapseBtn.setAttribute('aria-expanded', 'true');
+    collapseBtn.title = panelId === 'wheels-panel' ? 'Collapse wheels' : 'Collapse module';
+  }
+}
+
 export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   const calibrationPanel = document.getElementById('calibration-panel');
   const wheelsPanel = document.getElementById('wheels-panel');
@@ -31,6 +44,7 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   const mobileBar = document.getElementById('mobile-module-bar');
   const bottomBar = document.getElementById('bottom-bar');
   const presetSection = document.getElementById('preset-section');
+  const colorManagementPanel = document.getElementById('color-management-panel');
   const capabilities = document.getElementById('capabilities');
 
   const wheelsAvailableByLayer = state.ui.activeLayer !== 'toning' || deps.mobileModuleSelection === 'wheels';
@@ -78,32 +92,51 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     }
 
     if (bottomBar) {
-      bottomBar.style.display = (presetsSelection || colorManagementSelection) ? 'block' : 'none';
+      bottomBar.style.display = presetsSelection ? 'block' : 'none';
     }
     if (presetSection) {
       presetSection.style.display = presetsSelection ? 'flex' : 'none';
     }
-    if (capabilities) {
-      capabilities.style.display = (presetsSelection || colorManagementSelection) ? 'block' : 'none';
-    }
-
-    const colorManagementPanel = document.getElementById('color-management-panel');
     if (colorManagementPanel) {
       colorManagementPanel.style.display = colorManagementSelection ? 'block' : 'none';
+    }
+    if (capabilities) {
+      capabilities.style.display = presetsSelection ? 'block' : 'none';
     }
 
     if (wheelsPanel) {
       const wheelsSelection = deps.mobileModuleSelection === 'wheels';
-      wheelsPanel.style.display = wheelsSelection ? 'block' : 'none';
+      const wheelsPreviewSelection = deps.mobileModuleSelection !== 'wheels';
+      wheelsPanel.style.display = wheelsSelection || wheelsPreviewSelection ? 'block' : 'none';
+      wheelsPanel.classList.toggle('wheels-mini-preview', wheelsPreviewSelection);
+      if (wheelsSelection) forceExpanded('wheels-panel', 'wheels-collapse-btn');
     }
-    if (calibrationPanel) calibrationPanel.style.display = deps.mobileModuleSelection === 'calibration' ? 'block' : 'none';
-    if (xyPanel) xyPanel.style.display = deps.mobileModuleSelection === 'calibration' ? 'block' : 'none';
-    if (mappingPanel) mappingPanel.style.display = deps.mobileModuleSelection === 'mapping' ? 'block' : 'none';
-    if (toningPanel) toningPanel.style.display = deps.mobileModuleSelection === 'toning' ? 'block' : 'none';
+    if (calibrationPanel) {
+      const isCalibration = deps.mobileModuleSelection === 'calibration';
+      calibrationPanel.style.display = isCalibration ? 'block' : 'none';
+      if (isCalibration) forceExpanded('calibration-panel', 'calibration-collapse-btn');
+    }
+    if (xyPanel) {
+      const isCalibration = deps.mobileModuleSelection === 'calibration';
+      xyPanel.style.display = isCalibration ? 'block' : 'none';
+      if (isCalibration) forceExpanded('xy-panel', 'xy-panel-collapse-btn');
+    }
+    if (mappingPanel) {
+      const isMapping = deps.mobileModuleSelection === 'mapping';
+      mappingPanel.style.display = isMapping ? 'block' : 'none';
+      if (isMapping) forceExpanded('mapping-panel', 'mapping-collapse-btn');
+    }
+    if (toningPanel) {
+      const isToning = deps.mobileModuleSelection === 'toning';
+      toningPanel.style.display = isToning ? 'block' : 'none';
+      if (isToning) forceExpanded('toning-panel', 'toning-collapse-btn');
+    }
 
     if (wheelsRow) {
-      const shouldShowWheels = deps.mobileModuleSelection === 'wheels';
-      const wheelsCollapsed = wheelsPanel?.classList.contains('is-collapsed') ?? false;
+      const wheelsSelection = deps.mobileModuleSelection === 'wheels';
+      const wheelsPreviewSelection = deps.mobileModuleSelection !== 'wheels';
+      const shouldShowWheels = wheelsSelection || wheelsPreviewSelection;
+      const wheelsCollapsed = wheelsSelection && (wheelsPanel?.classList.contains('is-collapsed') ?? false);
       wheelsRow.style.display = shouldShowWheels && !wheelsCollapsed ? 'flex' : 'none';
     }
   } else {
@@ -113,7 +146,6 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     if (bottomBar) bottomBar.style.display = 'block';
     if (presetSection) presetSection.style.display = 'flex';
     if (capabilities) capabilities.style.display = 'block';
-    const colorManagementPanel = document.getElementById('color-management-panel');
     if (colorManagementPanel) colorManagementPanel.style.display = 'block';
   }
 
@@ -216,7 +248,6 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   updateSlider('shadows-slider', state.toning.shadows);
   updateSlider('whites-slider', state.toning.whites);
   updateSlider('blacks-slider', state.toning.blacks);
-  updateSlider('global-hue-slider', state.globalHueShift);
   deps.updateToneCurveControlUI(state);
 
   updateMappingDetail(state);

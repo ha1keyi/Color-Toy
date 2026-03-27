@@ -79,10 +79,11 @@ let _deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 const UI_LAYOUT_STORAGE_KEY = 'colorToy.ui.layout';
 const MODULE_COLLAPSE_STORAGE_PREFIX = 'colorToy.ui.collapsed.';
 const PREVIEW_SPLIT_STORAGE_PREFIX = 'colorToy.ui.previewSplit.';
+const WHEELS_MINI_POSITION_STORAGE_KEY = 'colorToy.ui.wheelsMiniPosition';
 let _mobileModuleSelection: MobileModule = 'none';
 let _mobileCalibrationPrimary: 'none' | 'xy' | 'red' | 'green' | 'blue' = 'none';
-let _mobileMappingMode: 'global' | 'point' | 'picker' = 'global';
-let _mobileMappingControl: 'src' | 'dst' | 'range' | 'strength' = 'src';
+let _mobileMappingMode: 'global' | 'point' = 'global';
+let _mobileMappingControl: 'picker' | 'src' | 'dst' | 'range' | 'strength' = 'picker';
 let _mobileToningControl: 'contrast' | 'exposure' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'curve' = 'contrast';
 let _previewControlsManuallyResized = false;
 
@@ -231,7 +232,9 @@ function init(): void {
   setupPreviewControlsDivider();
   setupMobileModuleBar();
   setupMobileSubmoduleControls();
+  // Note: slider wrapper DOM manipulation was removed to keep markup deterministic.
   setupWheelsDock();
+  setupMiniWheelsDrag();
   setupLayoutProfileControls();
   setupPresets();
   setupExport();
@@ -928,7 +931,8 @@ function updateSplitDividerUI(state: AppState): void {
   const container = document.getElementById('preview-container') as HTMLElement | null;
   if (!divider || !glCanvas || !container) return;
 
-  const visible = state.ui.splitView && state.imageLoaded;
+  const mobileImagePriority = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  const visible = state.ui.splitView && state.imageLoaded && (!mobileImagePriority || _mobileModuleSelection === 'wheels');
   divider.style.display = visible ? 'flex' : 'none';
   if (!visible) return;
 
@@ -947,7 +951,7 @@ function setupWheelCompareToggle(): void {
   if (!btn || !row) return;
 
   const labels = ['Compare: Left/Right', 'Compare: Inside/Outside'];
-  let mode = 0;
+  let mode = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority' ? 1 : 0;
 
   const applyMode = () => {
     row.classList.remove('wheels-compare-swap', 'wheels-compare-inside');
@@ -1129,7 +1133,11 @@ function applyPreviewControlsSplit(state: AppState): void {
   }
 
   const layoutMode = getCurrentLayoutMode();
-  const autoOverlayMode = layoutMode === 'image-priority' && !_previewControlsManuallyResized;
+  const dividerVisible = layoutMode === 'image-priority' && state.imageLoaded;
+  divider.classList.toggle('active', dividerVisible);
+  const autoOverlayMode = layoutMode === 'image-priority'
+    && !_previewControlsManuallyResized
+    && _mobileModuleSelection !== 'wheels';
   if (autoOverlayMode) {
     app.style.setProperty('--preview-controls-ratio', '1');
     app.style.setProperty('--controls-flex-ratio', '0');
@@ -1148,7 +1156,7 @@ function applyPreviewControlsSplit(state: AppState): void {
   app.style.setProperty('--preview-controls-ratio', ratio.toFixed(4));
   app.style.setProperty('--controls-flex-ratio', (1 - ratio).toFixed(4));
   controls.classList.toggle('full-preview', !imagePriorityModuleOpen && layoutMode === 'image-priority');
-  divider.classList.toggle('active', imagePriorityModuleOpen);
+  divider.classList.toggle('active', layoutMode === 'image-priority');
 }
 
 function setupPreviewControlsDivider(): void {
@@ -1164,8 +1172,6 @@ function setupPreviewControlsDivider(): void {
     if (!isMobileCompactViewport()) return;
     const layoutMode = getCurrentLayoutMode();
     if (layoutMode !== 'image-priority') return;
-    if (_mobileModuleSelection === 'none') return;
-
     const areaTop = preview.getBoundingClientRect().top;
     const areaBottom = controls.getBoundingClientRect().bottom;
     const areaHeight = areaBottom - areaTop;
@@ -1229,11 +1235,12 @@ function setupMobileModuleBar(): void {
         });
 
         if (_mobileModuleSelection === 'calibration') {
-          _mobileCalibrationPrimary = 'none';
+          _mobileCalibrationPrimary = _mobileCalibrationPrimary === 'none' ? 'red' : _mobileCalibrationPrimary;
         }
         if (_mobileModuleSelection === 'mapping') {
+          // Keep mapping hierarchy: secondary = global/point, tertiary = picker/source/target/range/strength.
           _mobileMappingMode = 'global';
-          _mobileMappingControl = 'src';
+          _mobileMappingControl = 'picker';
         }
         if (_mobileModuleSelection === 'toning') {
           _mobileToningControl = 'contrast';
@@ -1271,10 +1278,199 @@ function setupWheelsDock(): void {
     if (!isMobileCompactViewport() || getCurrentLayoutMode() !== 'image-priority') return;
 
     const next: MobileModule = _mobileModuleSelection === 'wheels' ? 'none' : 'wheels';
+    if (next === 'wheels') {
+      const row = document.getElementById('wheels-row');
+      const compareBtn = document.getElementById('wheel-compare-btn') as HTMLButtonElement | null;
+      if (row instanceof HTMLElement && !row.classList.contains('wheels-compare-inside') && compareBtn) {
+        compareBtn.click();
+      }
+    }
     setMobileModuleSelection(next);
     updatePanelUI(store.getState());
     handleResize();
   });
+}
+
+function setupMiniWheelsDrag(): void {
+  const panel = document.getElementById('wheels-panel') as HTMLElement | null;
+  if (!panel) return;
+
+  const root = document.documentElement;
+  let dragging = false;
+  let activePointerId: number | null = null;
+  let startClientX = 0;
+  let startClientY = 0;
+  let startOffsetX = 0;
+  let startOffsetY = 0;
+  let currentOffsetX = 0;
+  let currentOffsetY = 0;
+
+  const parsePx = (value: string | null | undefined): number => {
+    if (!value) return 0;
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const isDraggableMiniPreview = (): boolean => {
+    if (!isMobileCompactViewport() || getCurrentLayoutMode() !== 'image-priority') return false;
+    if (!panel.classList.contains('wheels-mini-preview')) return false;
+    return _mobileModuleSelection !== 'wheels';
+  };
+
+  const applyOffsets = (x: number, y: number): void => {
+    currentOffsetX = x;
+    currentOffsetY = y;
+    root.style.setProperty('--wheels-mini-x', `${x}px`);
+    root.style.setProperty('--wheels-mini-y', `${y}px`);
+  };
+
+  const clampAndApply = (x: number, y: number): void => {
+    applyOffsets(x, y);
+
+    const rect = panel.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const edgePad = 6;
+    const headerHeight = parsePx(getComputedStyle(root).getPropertyValue('--header-height')) || 52;
+    const minTop = headerHeight + 4;
+    const maxRight = window.innerWidth - edgePad;
+    const maxBottom = window.innerHeight - edgePad;
+
+    let correctedX = currentOffsetX;
+    let correctedY = currentOffsetY;
+
+    if (rect.left < edgePad) {
+      correctedX += edgePad - rect.left;
+    }
+    if (rect.right > maxRight) {
+      correctedX -= rect.right - maxRight;
+    }
+    if (rect.top < minTop) {
+      correctedY += minTop - rect.top;
+    }
+    if (rect.bottom > maxBottom) {
+      correctedY -= rect.bottom - maxBottom;
+    }
+
+    if (correctedX !== currentOffsetX || correctedY !== currentOffsetY) {
+      applyOffsets(correctedX, correctedY);
+    }
+  };
+
+  const persistOffsets = (): void => {
+    window.localStorage.setItem(
+      WHEELS_MINI_POSITION_STORAGE_KEY,
+      JSON.stringify({ x: Math.round(currentOffsetX), y: Math.round(currentOffsetY) }),
+    );
+  };
+
+  const restoreOffsets = (): void => {
+    try {
+      const raw = window.localStorage.getItem(WHEELS_MINI_POSITION_STORAGE_KEY);
+      if (!raw) {
+        clampAndApply(0, 0);
+        return;
+      }
+      const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown };
+      const x = typeof parsed.x === 'number' && Number.isFinite(parsed.x) ? parsed.x : 0;
+      const y = typeof parsed.y === 'number' && Number.isFinite(parsed.y) ? parsed.y : 0;
+      clampAndApply(x, y);
+    } catch {
+      clampAndApply(0, 0);
+    }
+  };
+
+  panel.addEventListener('pointerdown', (event) => {
+    if (!isDraggableMiniPreview()) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button,input,select,textarea,a')) return;
+
+    dragging = true;
+    activePointerId = event.pointerId;
+    startClientX = event.clientX;
+    startClientY = event.clientY;
+
+    startOffsetX = parsePx(getComputedStyle(root).getPropertyValue('--wheels-mini-x'));
+    startOffsetY = parsePx(getComputedStyle(root).getPropertyValue('--wheels-mini-y'));
+
+    panel.classList.add('is-dragging');
+    panel.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  window.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    if (activePointerId !== null && event.pointerId !== activePointerId) return;
+
+    const nextX = startOffsetX + (event.clientX - startClientX);
+    const nextY = startOffsetY + (event.clientY - startClientY);
+    clampAndApply(nextX, nextY);
+  });
+
+  const finishDrag = (pointerId?: number): void => {
+    if (!dragging) return;
+    if (pointerId !== undefined && activePointerId !== null && pointerId !== activePointerId) return;
+
+    dragging = false;
+    activePointerId = null;
+    panel.classList.remove('is-dragging');
+    persistOffsets();
+  };
+
+  window.addEventListener('pointerup', (event) => finishDrag(event.pointerId));
+  window.addEventListener('pointercancel', (event) => finishDrag(event.pointerId));
+  panel.addEventListener('lostpointercapture', () => finishDrag());
+
+  window.addEventListener('resize', () => {
+    clampAndApply(currentOffsetX, currentOffsetY);
+  });
+
+  restoreOffsets();
+}
+
+function syncIsolatedOverlayBottomOffset(state: AppState): void {
+  const controls = document.getElementById('controls') as HTMLElement | null;
+  if (!controls) return;
+
+  const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  if (!imagePriorityMobile || !state.imageLoaded) {
+    controls.style.removeProperty('--isolated-overlay-extra-bottom');
+    return;
+  }
+
+  const moduleToPanel: Record<MobileModule, string | null> = {
+    none: null,
+    wheels: null,
+    history: null,
+    presets: null,
+    calibration: 'calibration-panel',
+    mapping: 'mapping-panel',
+    toning: 'toning-panel',
+    'color-management': 'color-management-panel',
+  };
+
+  const panelId = moduleToPanel[_mobileModuleSelection];
+  const panel = panelId ? document.getElementById(panelId) as HTMLElement | null : null;
+  if (!panel) {
+    controls.style.removeProperty('--isolated-overlay-extra-bottom');
+    return;
+  }
+
+  const panelStyle = getComputedStyle(panel);
+  if (panelStyle.display === 'none') {
+    controls.style.removeProperty('--isolated-overlay-extra-bottom');
+    return;
+  }
+
+  // Use the shared panel stack height so overlay sliders clear module rails consistently.
+  const panelStack = panel.closest('#panels') as HTMLElement | null;
+  const offsetAnchor = panelStack ?? panel;
+  const rect = offsetAnchor.getBoundingClientRect();
+  const moduleGap = _mobileModuleSelection === 'mapping' ? 16 : 12;
+  const extraBottom = Math.max(68, Math.round(rect.height + moduleGap));
+  controls.style.setProperty('--isolated-overlay-extra-bottom', `${extraBottom}px`);
 }
 
 function setupMobileSubmoduleControls(): void {
@@ -1293,8 +1489,11 @@ function setupMobileSubmoduleControls(): void {
   mappingModeTabs.forEach((btn) => {
     btn.addEventListener('click', () => {
       const next = btn.dataset.mappingMode;
-      if (next === 'global' || next === 'point' || next === 'picker') {
+      if (next === 'global' || next === 'point') {
         _mobileMappingMode = next;
+        if (next === 'global') {
+          _mobileMappingControl = 'picker';
+        }
         updatePanelUI(store.getState());
       }
     });
@@ -1304,7 +1503,7 @@ function setupMobileSubmoduleControls(): void {
   mappingControlTabs.forEach((btn) => {
     btn.addEventListener('click', () => {
       const next = btn.dataset.mappingControl;
-      if (next === 'src' || next === 'dst' || next === 'range' || next === 'strength') {
+      if (next === 'picker' || next === 'src' || next === 'dst' || next === 'range' || next === 'strength') {
         _mobileMappingControl = next;
         updatePanelUI(store.getState());
       }
@@ -1337,13 +1536,17 @@ function setupModuleCollapse(): void {
     const storageKey = MODULE_COLLAPSE_STORAGE_PREFIX + targetId;
     const stored = window.localStorage.getItem(storageKey);
     let collapsed = stored === null ? defaultCollapsed : stored === '1';
+    const isWheelsPanel = targetId === 'wheels-panel';
 
     const apply = () => {
       target.classList.toggle('is-collapsed', collapsed);
       button.classList.toggle('is-collapsed', collapsed);
       button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      button.title = collapsed ? 'Expand module' : 'Collapse module';
-      button.textContent = collapsed ? '>' : 'v';
+      if (isWheelsPanel) {
+        button.title = collapsed ? 'Expand wheels' : 'Collapse wheels';
+      } else {
+        button.title = collapsed ? 'Expand module' : 'Collapse module';
+      }
     };
 
     apply();
@@ -1575,17 +1778,6 @@ function setupToningSliders(): void {
       store.commit({
         toning: { ...state.toning, [s.key]: parseFloat(el.value) },
       }, s.label);
-    });
-  }
-
-  // Global hue shift slider
-  const hueSlider = document.getElementById('global-hue-slider') as HTMLInputElement;
-  if (hueSlider) {
-    hueSlider.addEventListener('input', () => {
-      store.update({ globalHueShift: parseFloat(hueSlider.value) });
-    });
-    hueSlider.addEventListener('change', () => {
-      store.commit({ globalHueShift: parseFloat(hueSlider.value) }, 'Adjust Global Hue');
     });
   }
 }
@@ -1936,7 +2128,6 @@ function setupValInputs(): void {
   const toningSliders = [
     'exposure-slider', 'contrast-slider', 'highlights-slider',
     'shadows-slider', 'whites-slider', 'blacks-slider',
-    'global-hue-slider',
   ];
   for (const sliderId of toningSliders) {
     const valInput = document.getElementById(sliderId + '-val') as HTMLInputElement;
@@ -1995,7 +2186,6 @@ function setupDoubleClickReset(): void {
     'exposure-slider': 0, 'contrast-slider': 1,
     'highlights-slider': 0, 'shadows-slider': 0,
     'whites-slider': 0, 'blacks-slider': 0,
-    'global-hue-slider': 0,
     'mapping-src-slider': 0, 'mapping-dst-slider': 0,
     'mapping-range-slider': 0.083, 'mapping-strength-slider': 1,
     'picker-radius-slider': 2,
@@ -2776,6 +2966,32 @@ function drawHistogram(): void {
   ctx.globalAlpha = 1.0;
 }
 
+function syncCompactAdjustmentHeader(adjustmentMode: boolean): void {
+  const headerLeft = document.querySelector('#header .header-left') as HTMLElement | null;
+  const topActions = document.querySelector('#top-control-bar .top-global-actions') as HTMLElement | null;
+  const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement | null;
+  const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement | null;
+
+  if (!headerLeft || !topActions || !undoBtn || !redoBtn) return;
+
+  if (adjustmentMode) {
+    if (undoBtn.parentElement !== topActions) {
+      topActions.insertBefore(undoBtn, topActions.firstChild);
+    }
+    if (redoBtn.parentElement !== topActions) {
+      topActions.insertBefore(redoBtn, undoBtn.nextSibling);
+    }
+    return;
+  }
+
+  if (undoBtn.parentElement !== headerLeft) {
+    headerLeft.appendChild(undoBtn);
+  }
+  if (redoBtn.parentElement !== headerLeft) {
+    headerLeft.appendChild(redoBtn);
+  }
+}
+
 // ============ UI Updates ============
 
 function updatePanelUI(state: AppState): void {
@@ -2800,12 +3016,16 @@ function updatePanelUI(state: AppState): void {
   const toningPanel = document.getElementById('toning-panel');
   const dockBtn = document.getElementById('wheels-dock-btn') as HTMLButtonElement | null;
 
-  if (calibrationPanel) calibrationPanel.setAttribute('data-cal-primary', _mobileCalibrationPrimary);
+  if (calibrationPanel) {
+    calibrationPanel.setAttribute('data-cal-primary', _mobileModuleSelection === 'calibration' ? _mobileCalibrationPrimary : 'none');
+  }
   if (mappingPanel) {
     mappingPanel.setAttribute('data-mapping-mode', _mobileMappingMode);
     mappingPanel.setAttribute('data-mapping-control', _mobileMappingControl);
   }
   if (toningPanel) toningPanel.setAttribute('data-toning-control', _mobileToningControl);
+
+  syncIsolatedOverlayBottomOffset(state);
 
   const syncActive = (selector: string, key: string, value: string) => {
     document.querySelectorAll(selector).forEach((el) => {
@@ -2820,9 +3040,21 @@ function updatePanelUI(state: AppState): void {
   syncActive('#toning-control-tabs [data-toning-control]', 'toningControl', _mobileToningControl);
 
   const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
-  const autoOverlay = imagePriorityMobile && !_previewControlsManuallyResized;
+  const adjustmentMode = imagePriorityMobile && (_mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning');
+  const autoOverlay = imagePriorityMobile && !_previewControlsManuallyResized && _mobileModuleSelection !== 'wheels';
 
   if (app) app.classList.toggle('auto-overlay-mode', autoOverlay);
+  if (app) app.classList.toggle('compact-adjustment-mode', adjustmentMode);
+
+  syncCompactAdjustmentHeader(adjustmentMode);
+
+  if (imagePriorityMobile && state.ui.activeLayer === 'calibration' && _mobileCalibrationPrimary === 'xy') {
+    drawXYDiagram(state);
+  }
+
+  if (imagePriorityMobile && state.ui.activeLayer === 'toning' && _mobileToningControl === 'curve') {
+    drawToneCurve();
+  }
 
   if (controls) {
     controls.classList.toggle('module-calibration', _mobileModuleSelection === 'calibration');
@@ -2830,13 +3062,24 @@ function updatePanelUI(state: AppState): void {
     controls.classList.toggle('module-toning', _mobileModuleSelection === 'toning');
     controls.classList.toggle('module-color-management', _mobileModuleSelection === 'color-management');
     controls.classList.toggle('module-wheels', _mobileModuleSelection === 'wheels');
+    controls.dataset.mobileModule = _mobileModuleSelection;
+    controls.dataset.calPrimary = _mobileModuleSelection === 'calibration' ? _mobileCalibrationPrimary : 'none';
+    controls.dataset.mappingMode = _mobileModuleSelection === 'mapping' ? _mobileMappingMode : '';
+    controls.dataset.mappingControl = _mobileModuleSelection === 'mapping' ? _mobileMappingControl : '';
+    controls.dataset.toningControl = _mobileModuleSelection === 'toning' ? _mobileToningControl : '';
   }
 
   if (dockBtn) {
     const shouldShowDock = imagePriorityMobile;
+    const wheelsRow = document.getElementById('wheels-row');
+    const insideMode = wheelsRow instanceof HTMLElement && wheelsRow.classList.contains('wheels-compare-inside');
     dockBtn.style.display = shouldShowDock ? 'inline-flex' : 'none';
     dockBtn.classList.toggle('active', _mobileModuleSelection === 'wheels');
-    dockBtn.title = _mobileModuleSelection === 'wheels' ? 'Hide Wheels' : 'Show Wheels';
+    dockBtn.classList.toggle('mode-in', _mobileModuleSelection === 'wheels');
+    dockBtn.classList.toggle('mode-out', _mobileModuleSelection !== 'wheels');
+    dockBtn.title = _mobileModuleSelection === 'wheels'
+      ? 'Hide Wheels'
+      : (insideMode ? 'Show Wheels (In/Out)' : 'Show Wheels');
   }
 }
 

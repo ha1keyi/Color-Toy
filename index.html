@@ -89,7 +89,8 @@
 
     <!-- Preview Area -->
     <div id="preview-container">
-      <button id="wheels-dock-btn" class="wheels-dock-btn" type="button" aria-label="Toggle Wheels" title="Toggle Wheels">
+      <button id="wheels-dock-btn" class="wheels-dock-btn" type="button" aria-label="Toggle Wheels"
+        title="Toggle Wheels">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="8"></circle>
           <circle cx="12" cy="12" r="3"></circle>
@@ -193,59 +194,12 @@
               </button>
             </div>
           </div>
-          <div id="calibration-primary-tabs" class="mobile-submodule-tabs calibration-tabs" aria-label="Calibration Primary Selector">
+          <div id="calibration-primary-tabs" class="calibration-primary-rail calibration-tabs"
+            aria-label="Calibration Primary Selector">
             <button class="submodule-tab" type="button" data-cal-primary="xy">XY</button>
             <button class="submodule-tab active" type="button" data-cal-primary="red">R</button>
             <button class="submodule-tab" type="button" data-cal-primary="green">G</button>
             <button class="submodule-tab" type="button" data-cal-primary="blue">B</button>
-          </div>
-          <!-- Red Primary -->
-          <div class="cal-channel" data-cal-primary="red">
-            <span class="cal-label red">R</span>
-            <div class="cal-sliders">
-              <div class="slider-row">
-                <label>Hue</label>
-                <input type="range" id="red-hue-slider" min="-180" max="180" step="0.1" value="0">
-                <input type="number" id="red-hue-slider-val" class="val-input" step="0.1" value="0.0">
-              </div>
-              <div class="slider-row">
-                <label>Saturation</label>
-                <input type="range" id="red-sat-slider" min="-100" max="100" step="1" value="0">
-                <input type="number" id="red-sat-slider-val" class="val-input" step="1" value="0">
-              </div>
-            </div>
-          </div>
-          <!-- Green Primary -->
-          <div class="cal-channel" data-cal-primary="green">
-            <span class="cal-label green">G</span>
-            <div class="cal-sliders">
-              <div class="slider-row">
-                <label>Hue</label>
-                <input type="range" id="green-hue-slider" min="-180" max="180" step="0.1" value="0">
-                <input type="number" id="green-hue-slider-val" class="val-input" step="0.1" value="0.0">
-              </div>
-              <div class="slider-row">
-                <label>Saturation</label>
-                <input type="range" id="green-sat-slider" min="-100" max="100" step="1" value="0">
-                <input type="number" id="green-sat-slider-val" class="val-input" step="1" value="0">
-              </div>
-            </div>
-          </div>
-          <!-- Blue Primary -->
-          <div class="cal-channel" data-cal-primary="blue">
-            <span class="cal-label blue">B</span>
-            <div class="cal-sliders">
-              <div class="slider-row">
-                <label>Hue</label>
-                <input type="range" id="blue-hue-slider" min="-180" max="180" step="0.1" value="0">
-                <input type="number" id="blue-hue-slider-val" class="val-input" step="0.1" value="0.0">
-              </div>
-              <div class="slider-row">
-                <label>Saturation</label>
-                <input type="range" id="blue-sat-slider" min="-100" max="100" step="1" value="0">
-                <input type="number" id="blue-sat-slider-val" class="val-input" step="1" value="0">
-              </div>
-            </div>
           </div>
 
         </div>
@@ -331,16 +285,6 @@
               </button>
             </div>
           </div>
-          <div id="mapping-mode-tabs" class="mobile-submodule-tabs mapping-mode-tabs" aria-label="Hue Map Mode Selector">
-            <button class="submodule-tab active" type="button" data-mapping-mode="global">Global</button>
-            <button class="submodule-tab" type="button" data-mapping-mode="point">Point</button>
-            <button class="submodule-tab" type="button" data-mapping-mode="picker">Picker</button>
-          </div>
-          <div class="slider-row mapping-global-row">
-            <label>Global Hue</label>
-            <input type="range" id="global-hue-slider" min="0" max="1" step="0.001" value="0">
-            <input type="number" id="global-hue-slider-val" class="val-input" step="0.001" value="0.00">
-          </div>
           <div id="mapping-list" class="mapping-list mapping-point-group"></div>
           <div class="mapping-actions mapping-point-group">
             <button id="add-mapping-btn" class="small-btn">+ Add Point</button>
@@ -348,40 +292,19 @@
               Image</button>
             <button id="delete-mapping-btn" class="small-btn danger">Delete</button>
           </div>
-          <div class="picker-settings-row mapping-picker-group">
-            <label for="picker-radius-slider">Pick Radius</label>
-            <input type="range" id="picker-radius-slider" min="0" max="6" step="1" value="2">
-            <input type="number" id="picker-radius-slider-val" class="val-input" min="0" max="6" step="1" value="2">
-          </div>
           <div id="picker-coord-readout" class="picker-coord-readout mapping-picker-group">Pixel: -, -</div>
-          <div id="mapping-detail" class="mapping-point-group" style="display:none">
-            <h4>Control Point</h4>
-            <div id="mapping-control-tabs" class="mobile-submodule-tabs mapping-control-tabs" aria-label="Hue Map Point Parameter Selector">
-              <button class="submodule-tab active" type="button" data-mapping-control="src">Source</button>
-              <button class="submodule-tab" type="button" data-mapping-control="dst">Target</button>
-              <button class="submodule-tab" type="button" data-mapping-control="range">Range</button>
-              <button class="submodule-tab" type="button" data-mapping-control="strength">Strength</button>
-            </div>
-            <div class="slider-row mapping-control-row" data-mapping-control="src">
-              <label>Source</label>
-              <input type="range" id="mapping-src-slider" min="0" max="1" step="0.001" value="0">
-              <input type="number" id="mapping-src-slider-val" class="val-input" step="0.001" value="0.00">
-            </div>
-            <div class="slider-row mapping-control-row" data-mapping-control="dst">
-              <label>Target</label>
-              <input type="range" id="mapping-dst-slider" min="0" max="1" step="0.001" value="0">
-              <input type="number" id="mapping-dst-slider-val" class="val-input" step="0.001" value="0.00">
-            </div>
-            <div class="slider-row mapping-control-row" data-mapping-control="range">
-              <label>Range</label>
-              <input type="range" id="mapping-range-slider" min="0.01" max="0.5" step="0.001" value="0.083">
-              <input type="number" id="mapping-range-slider-val" class="val-input" step="0.001" value="0.08">
-            </div>
-            <div class="slider-row mapping-control-row" data-mapping-control="strength">
-              <label>Strength</label>
-              <input type="range" id="mapping-strength-slider" min="0" max="1" step="0.01" value="1">
-              <input type="number" id="mapping-strength-slider-val" class="val-input" step="0.001" value="1.00">
-            </div>
+          <div id="mapping-control-tabs" class="mapping-control-rail mapping-control-tabs"
+            aria-label="Hue Map Point Parameter Selector">
+            <button class="submodule-tab active" type="button" data-mapping-control="picker">Picker</button>
+            <button class="submodule-tab" type="button" data-mapping-control="src">Source</button>
+            <button class="submodule-tab" type="button" data-mapping-control="dst">Target</button>
+            <button class="submodule-tab" type="button" data-mapping-control="range">Range</button>
+            <button class="submodule-tab" type="button" data-mapping-control="strength">Strength</button>
+          </div>
+          <div id="mapping-mode-tabs" class="mapping-mode-rail"
+            aria-label="Hue Map Mode Selector">
+            <button class="submodule-tab active" type="button" data-mapping-mode="global">Global</button>
+            <button class="submodule-tab" type="button" data-mapping-mode="point">Point</button>
           </div>
         </div>
 
@@ -404,7 +327,7 @@
               </button>
             </div>
           </div>
-          <div id="toning-control-tabs" class="mobile-submodule-tabs toning-tabs" aria-label="Toning Control Selector">
+          <div id="toning-control-tabs" class="toning-control-rail toning-tabs" aria-label="Toning Control Selector">
             <button class="submodule-tab active" type="button" data-toning-control="contrast">Contrast</button>
             <button class="submodule-tab" type="button" data-toning-control="exposure">Exposure</button>
             <button class="submodule-tab" type="button" data-toning-control="highlights">Highlights</button>
@@ -425,36 +348,121 @@
             <button id="tone-curve-enable-btn" class="small-btn" type="button">Tone Curve: On</button>
             <button id="tone-curve-bypass-btn" class="small-btn" type="button">A/B: Processed</button>
           </div>
-          <div class="slider-row toning-slider-row" data-toning-control="exposure">
-            <label>Exposure</label>
-            <input type="range" id="exposure-slider" min="-2" max="2" step="0.01" value="0">
-            <input type="number" id="exposure-slider-val" class="val-input" step="0.01" value="0.00">
+        </div>
+      </div>
+
+      <!-- Isolated slider wrappers (kept outside panels for clean overlay) -->
+      <div id="isolated-cal-sliders" class="isolated-slider-panel" aria-hidden="false">
+        <!-- Red Primary -->
+        <div class="cal-channel" data-cal-primary="red">
+          <span class="cal-label red">R</span>
+          <div class="cal-sliders">
+            <div class="slider-row">
+              <label>Hue</label>
+              <input type="range" id="red-hue-slider" min="-180" max="180" step="0.1" value="0">
+              <input type="number" id="red-hue-slider-val" class="val-input" step="0.1" value="0.0">
+            </div>
+            <div class="slider-row">
+              <label>Saturation</label>
+              <input type="range" id="red-sat-slider" min="-100" max="100" step="1" value="0">
+              <input type="number" id="red-sat-slider-val" class="val-input" step="1" value="0">
+            </div>
           </div>
-          <div class="slider-row toning-slider-row" data-toning-control="contrast">
-            <label>Contrast</label>
-            <input type="range" id="contrast-slider" min="0.5" max="2" step="0.01" value="1">
-            <input type="number" id="contrast-slider-val" class="val-input" step="0.01" value="1.00">
+        </div>
+        <!-- Green Primary -->
+        <div class="cal-channel" data-cal-primary="green">
+          <span class="cal-label green">G</span>
+          <div class="cal-sliders">
+            <div class="slider-row">
+              <label>Hue</label>
+              <input type="range" id="green-hue-slider" min="-180" max="180" step="0.1" value="0">
+              <input type="number" id="green-hue-slider-val" class="val-input" step="0.1" value="0.0">
+            </div>
+            <div class="slider-row">
+              <label>Saturation</label>
+              <input type="range" id="green-sat-slider" min="-100" max="100" step="1" value="0">
+              <input type="number" id="green-sat-slider-val" class="val-input" step="1" value="0">
+            </div>
           </div>
-          <div class="slider-row toning-slider-row" data-toning-control="highlights">
-            <label>Highlights</label>
-            <input type="range" id="highlights-slider" min="-1" max="1" step="0.01" value="0">
-            <input type="number" id="highlights-slider-val" class="val-input" step="0.01" value="0.00">
+        </div>
+        <!-- Blue Primary -->
+        <div class="cal-channel" data-cal-primary="blue">
+          <span class="cal-label blue">B</span>
+          <div class="cal-sliders">
+            <div class="slider-row">
+              <label>Hue</label>
+              <input type="range" id="blue-hue-slider" min="-180" max="180" step="0.1" value="0">
+              <input type="number" id="blue-hue-slider-val" class="val-input" step="0.1" value="0.0">
+            </div>
+            <div class="slider-row">
+              <label>Saturation</label>
+              <input type="range" id="blue-sat-slider" min="-100" max="100" step="1" value="0">
+              <input type="number" id="blue-sat-slider-val" class="val-input" step="1" value="0">
+            </div>
           </div>
-          <div class="slider-row toning-slider-row" data-toning-control="shadows">
-            <label>Shadows</label>
-            <input type="range" id="shadows-slider" min="-1" max="1" step="0.01" value="0">
-            <input type="number" id="shadows-slider-val" class="val-input" step="0.01" value="0.00">
-          </div>
-          <div class="slider-row toning-slider-row" data-toning-control="whites">
-            <label>Whites</label>
-            <input type="range" id="whites-slider" min="-1" max="1" step="0.01" value="0">
-            <input type="number" id="whites-slider-val" class="val-input" step="0.01" value="0.00">
-          </div>
-          <div class="slider-row toning-slider-row" data-toning-control="blacks">
-            <label>Blacks</label>
-            <input type="range" id="blacks-slider" min="-1" max="1" step="0.01" value="0">
-            <input type="number" id="blacks-slider-val" class="val-input" step="0.01" value="0.00">
-          </div>
+        </div>
+      </div>
+
+      <div id="isolated-controls-sliders" class="isolated-slider-panel" aria-hidden="false">
+        <!-- Mapping: Picker radius -->
+        <div class="slider-row picker-settings-row mapping-picker-group">
+          <label for="picker-radius-slider">Pick Radius</label>
+          <input type="range" id="picker-radius-slider" min="0" max="6" step="1" value="2">
+          <input type="number" id="picker-radius-slider-val" class="val-input" min="0" max="6" step="1" value="2">
+        </div>
+
+        <!-- Mapping: Control point sliders -->
+        <div class="slider-row mapping-control-row" data-mapping-control="src">
+          <label>Source</label>
+          <input type="range" id="mapping-src-slider" min="0" max="1" step="0.001" value="0">
+          <input type="number" id="mapping-src-slider-val" class="val-input" step="0.001" value="0.00">
+        </div>
+        <div class="slider-row mapping-control-row" data-mapping-control="dst">
+          <label>Target</label>
+          <input type="range" id="mapping-dst-slider" min="0" max="1" step="0.001" value="0">
+          <input type="number" id="mapping-dst-slider-val" class="val-input" step="0.001" value="0.00">
+        </div>
+        <div class="slider-row mapping-control-row" data-mapping-control="range">
+          <label>Range</label>
+          <input type="range" id="mapping-range-slider" min="0.01" max="0.5" step="0.001" value="0.083">
+          <input type="number" id="mapping-range-slider-val" class="val-input" step="0.001" value="0.08">
+        </div>
+        <div class="slider-row mapping-control-row" data-mapping-control="strength">
+          <label>Strength</label>
+          <input type="range" id="mapping-strength-slider" min="0" max="1" step="0.01" value="1">
+          <input type="number" id="mapping-strength-slider-val" class="val-input" step="0.001" value="1.00">
+        </div>
+
+        <!-- Toning sliders -->
+        <div class="slider-row toning-slider-row" data-toning-control="exposure">
+          <label>Exposure</label>
+          <input type="range" id="exposure-slider" min="-2" max="2" step="0.01" value="0">
+          <input type="number" id="exposure-slider-val" class="val-input" step="0.01" value="0.00">
+        </div>
+        <div class="slider-row toning-slider-row" data-toning-control="contrast">
+          <label>Contrast</label>
+          <input type="range" id="contrast-slider" min="0.5" max="2" step="0.01" value="1">
+          <input type="number" id="contrast-slider-val" class="val-input" step="0.01" value="1.00">
+        </div>
+        <div class="slider-row toning-slider-row" data-toning-control="highlights">
+          <label>Highlights</label>
+          <input type="range" id="highlights-slider" min="-1" max="1" step="0.01" value="0">
+          <input type="number" id="highlights-slider-val" class="val-input" step="0.01" value="0.00">
+        </div>
+        <div class="slider-row toning-slider-row" data-toning-control="shadows">
+          <label>Shadows</label>
+          <input type="range" id="shadows-slider" min="-1" max="1" step="0.01" value="0">
+          <input type="number" id="shadows-slider-val" class="val-input" step="0.01" value="0.00">
+        </div>
+        <div class="slider-row toning-slider-row" data-toning-control="whites">
+          <label>Whites</label>
+          <input type="range" id="whites-slider" min="-1" max="1" step="0.01" value="0">
+          <input type="number" id="whites-slider-val" class="val-input" step="0.01" value="0.00">
+        </div>
+        <div class="slider-row toning-slider-row" data-toning-control="blacks">
+          <label>Blacks</label>
+          <input type="range" id="blacks-slider" min="-1" max="1" step="0.01" value="0">
+          <input type="number" id="blacks-slider-val" class="val-input" step="0.01" value="0.00">
         </div>
       </div>
 
@@ -473,6 +481,22 @@
         </div>
         <div id="history-list" class="history-list"></div>
       </section>
+
+      <div id="color-management-panel" class="color-management-panel">
+        <h4 class="color-management-title">Color Management</h4>
+        <div class="color-management-row">
+          <label for="working-space-select">Working Space</label>
+          <select id="working-space-select">
+            <option value="linear-srgb">Linear sRGB</option>
+            <option value="acescg">ACEScg</option>
+          </select>
+        </div>
+        <div class="color-management-row toggle-row">
+          <label for="gamut-compression-toggle">Soft Gamut Compression</label>
+          <button id="gamut-compression-toggle" class="small-btn" type="button">On</button>
+        </div>
+        <div id="icc-profile-readout" class="icc-profile-readout">ICC: Not detected</div>
+      </div>
 
     </div>
 
@@ -494,21 +518,6 @@
           <button id="save-preset-btn" class="small-btn">Save Preset</button>
           <button id="import-preset-btn" class="small-btn">Import</button>
         </div>
-      </div>
-      <div id="color-management-panel" class="color-management-panel">
-        <h4 class="color-management-title">Color Management</h4>
-        <div class="color-management-row">
-          <label for="working-space-select">Working Space</label>
-          <select id="working-space-select">
-            <option value="linear-srgb">Linear sRGB</option>
-            <option value="acescg">ACEScg</option>
-          </select>
-        </div>
-        <div class="color-management-row toggle-row">
-          <label for="gamut-compression-toggle">Soft Gamut Compression</label>
-          <button id="gamut-compression-toggle" class="small-btn" type="button">On</button>
-        </div>
-        <div id="icc-profile-readout" class="icc-profile-readout">ICC: Not detected</div>
       </div>
       <div id="capabilities" class="caps-badge"></div>
     </div>
