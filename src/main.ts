@@ -25,6 +25,7 @@ import {
   getCurrentLayoutMode,
   isImagePriorityMobileMode,
   isMobileCompactViewport,
+  isPortraitViewport,
   isValidLayout,
   isValidMobileModule,
   resolveResponsiveLayoutMode,
@@ -1179,7 +1180,7 @@ function setupLayoutControls(): void {
 
   const syncLayoutToggleVisibility = () => {
     if (!layoutToggleBtn) return;
-    layoutToggleBtn.style.display = isMobileCompactViewport() ? 'none' : '';
+    layoutToggleBtn.style.display = isMobileCompactViewport() && !isPortraitViewport() ? '' : 'none';
   };
 
   const applyResponsiveLayout = (requestedMode: UiLayoutMode): UiLayoutMode => {

@@ -45,9 +45,11 @@ function normalizeLayoutMode(mode: unknown): UiLayoutMode {
 function normalizeMobileModule(value: unknown): MobileModule {
   if (
     value === 'none'
+    || value === 'wheels'
     || value === 'calibration'
     || value === 'mapping'
     || value === 'toning'
+    || value === 'color-management'
     || value === 'history'
     || value === 'presets'
   ) {

@@ -1006,7 +1006,7 @@ body {
 
 #wheels-row.wheels-compare-inside #rendered-wheel-container {
   z-index: 3;
-  width: clamp(106px, 30vw, 132px);
+  width: clamp(164px, 52vw, 214px);
 }
 
 #wheels-row.wheels-compare-inside #wheel-canvas {
@@ -2100,35 +2100,37 @@ body {
 }
 
 /* Mobile current mode: make the panel a single layered card with content above the tab rail. */
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel,
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode #history-panel {
-  display: flex;
-  flex-direction: column;
-}
+@media (max-width: 767px) and (pointer: coarse), (max-width: 767px) and (hover: none) {
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode #history-panel {
+    display: flex;
+    flex-direction: column;
+  }
 
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel-header,
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode .history-panel-header {
-  display: none;
-}
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel-header,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode .history-panel-header {
+    display: none;
+  }
 
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode .module-collapse-btn {
-  display: none !important;
-}
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode .module-collapse-btn {
+    display: none !important;
+  }
 
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode :is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail) {
-  order: 2;
-  margin-top: 8px;
-  z-index: 3;
-}
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode :is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail) {
+    order: 2;
+    margin-top: 8px;
+    z-index: 3;
+  }
 
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel> :not(.panel-header):not(:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail)),
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode #history-panel> :not(.history-panel-header):not(:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail)) {
-  order: 1;
-}
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel> :not(.panel-header):not(:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail)),
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode #history-panel> :not(.history-panel-header):not(:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail)) {
+    order: 1;
+  }
 
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel>:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail),
-:root[data-ui-layout='image-priority'] #controls.image-priority-mode #history-panel>:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail) {
-  margin-top: auto;
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode .panel>:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail),
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode #history-panel>:is(.mobile-submodule-tabs, .mapping-control-rail, .mapping-mode-rail, .calibration-primary-rail, .toning-control-rail) {
+    margin-top: auto;
+  }
 }
 
 .mobile-submodule-tabs {
@@ -2155,7 +2157,7 @@ body {
 }
 
 /* Keep the wrappers in the controls column, but only expose a compact stack on mobile. */
-@media (max-width: 767px) {
+@media (max-width: 767px) and (pointer: coarse), (max-width: 767px) and (hover: none) {
 
   #controls.module-calibration #isolated-cal-sliders,
   #controls.module-mapping #isolated-controls-sliders,
@@ -2421,7 +2423,7 @@ body {
   color: var(--text-primary);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px) and (pointer: coarse), (max-width: 767px) and (hover: none) {
   :root {
     --header-height: 52px;
     --mobile-primary-bar-height: 52px;
@@ -2624,7 +2626,7 @@ body {
     --wheels-mini-shell-height: 112px;
     --wheels-mini-canvas-size: 46px;
     --wheels-mini-inside-edit-size: 72px;
-    --wheels-mini-inside-result-size: 48px;
+    --wheels-mini-inside-result-size: 72px;
     --wheels-mini-right-anchor: calc(58px + env(safe-area-inset-right, 0px));
     display: block !important;
     position: fixed;
@@ -2872,7 +2874,7 @@ body {
   }
 
   #wheels-row.wheels-compare-inside #rendered-wheel-container {
-    width: clamp(94px, 28vw, 116px);
+    width: clamp(146px, 46vw, 184px);
   }
 
   .mobile-module-bar {

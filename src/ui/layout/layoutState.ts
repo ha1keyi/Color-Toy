@@ -2,8 +2,18 @@ import type { MobileModule } from '../panels/panelState';
 
 export type UiLayoutMode = 'image-priority' | 'controls-priority';
 
+function matchesMediaQuery(query: string): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia(query).matches;
+}
+
 export function resolveResponsiveLayoutMode(mode: UiLayoutMode): UiLayoutMode {
-  return isMobileCompactViewport() ? 'image-priority' : mode;
+  if (!isMobileCompactViewport()) {
+    return 'controls-priority';
+  }
+
+  return isPortraitViewport() ? 'image-priority' : mode;
 }
 
 export function applyLayoutMode(mode: UiLayoutMode, onResetMobileModule?: () => void): UiLayoutMode {
@@ -16,7 +26,12 @@ export function applyLayoutMode(mode: UiLayoutMode, onResetMobileModule?: () => 
 }
 
 export function isMobileCompactViewport(): boolean {
-  return window.matchMedia('(max-width: 767px)').matches;
+  return matchesMediaQuery('(max-width: 767px)')
+    && (matchesMediaQuery('(pointer: coarse)') || matchesMediaQuery('(hover: none)'));
+}
+
+export function isPortraitViewport(): boolean {
+  return matchesMediaQuery('(orientation: portrait)');
 }
 
 export function isImagePriorityMobileMode(): boolean {

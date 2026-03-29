@@ -39,6 +39,14 @@ describe('layoutProfiles helpers', () => {
     expect(profile.collapsedModules).toEqual({ a: true });
   });
 
+  it('preserves wheels and color management mobile modules in profiles', () => {
+    const wheelsProfile = normalizeLayoutProfile({ mobileModuleSelection: 'wheels' }, 'wheels-profile');
+    const colorManagementProfile = normalizeLayoutProfile({ mobileModuleSelection: 'color-management' }, 'color-management-profile');
+
+    expect(wheelsProfile.mobileModuleSelection).toBe('wheels');
+    expect(colorManagementProfile.mobileModuleSelection).toBe('color-management');
+  });
+
   it('serializes and parses profiles', () => {
     const json = serializeLayoutProfiles([createDefaultLayoutProfile()]);
     const parsed = parseLayoutProfilesFromJson(json);

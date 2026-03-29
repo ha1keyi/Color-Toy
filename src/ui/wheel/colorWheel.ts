@@ -33,6 +33,10 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function formatRgbCss(r: number, g: number, b: number): string {
+  return `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+}
+
 interface WheelRenderMetrics {
   centerDotRadius: number;
   centerDotStrokeWidth: number;
@@ -173,8 +177,12 @@ export class ColorWheel {
   }
 
   private getRenderedInnerRadius(radius: number, insideOutside: boolean): number {
-    // Keep the top rendered wheel as a real ring in inside/outside mode so the edit wheel stays legible below it.
-    return insideOutside ? radius * 0.62 : radius * 0.3;
+    if (!insideOutside) {
+      return radius * 0.3;
+    }
+
+    const editInnerRadius = radius * 0.3;
+    return (radius + editInnerRadius) * 0.5;
   }
 
   private getRenderMetrics(radius: number, innerRadius: number, showLabels: boolean): WheelRenderMetrics {
@@ -395,27 +403,56 @@ export class ColorWheel {
     innerRadius: number,
     transform?: ((r: number, g: number, b: number) => [number, number, number]) | null,
   ): void {
-    const segments = 360;
+    if (typeof ctx.createConicGradient === 'function') {
+      const gradient = ctx.createConicGradient(-Math.PI / 2, center, center);
+      const samples = Math.round(clampNumber(radius * 4, 240, 720));
+
+      for (let i = 0; i <= samples; i++) {
+        const hue = i / samples;
+        let [r, g, b] = hsvToRgb(hue, 1, 1);
+
+        if (transform) {
+          [r, g, b] = transform(r, g, b);
+          r = clampNumber(r, 0, 1);
+          g = clampNumber(g, 0, 1);
+          b = clampNumber(b, 0, 1);
+        }
+
+        gradient.addColorStop(Math.min(hue, 1), formatRgbCss(r, g, b));
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(center, center, radius, 0, TWO_PI);
+      ctx.arc(center, center, innerRadius, 0, TWO_PI, true);
+      ctx.closePath();
+      ctx.clip();
+      ctx.fillStyle = gradient;
+      ctx.fillRect(center - radius - 1, center - radius - 1, radius * 2 + 2, radius * 2 + 2);
+      ctx.restore();
+      return;
+    }
+
+    const segments = Math.round(clampNumber(radius * 8, 360, 960));
     for (let i = 0; i < segments; i++) {
       const startAngle = (i / segments) * TWO_PI - Math.PI / 2;
-      const endAngle = ((i + 1.5) / segments) * TWO_PI - Math.PI / 2;
+      const endAngle = ((i + 1) / segments) * TWO_PI - Math.PI / 2;
       const hue = i / segments;
 
       let [r, g, b] = hsvToRgb(hue, 1, 1);
 
       if (transform) {
         [r, g, b] = transform(r, g, b);
-        r = Math.max(0, Math.min(1, r));
-        g = Math.max(0, Math.min(1, g));
-        b = Math.max(0, Math.min(1, b));
+        r = clampNumber(r, 0, 1);
+        g = clampNumber(g, 0, 1);
+        b = clampNumber(b, 0, 1);
       }
 
       ctx.beginPath();
       ctx.arc(center, center, radius, startAngle, endAngle);
       ctx.arc(center, center, innerRadius, endAngle, startAngle, true);
       ctx.closePath();
-
-      ctx.fillStyle = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+      ctx.fillStyle = formatRgbCss(r, g, b);
       ctx.fill();
     }
   }
