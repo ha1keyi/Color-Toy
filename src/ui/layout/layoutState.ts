@@ -2,11 +2,17 @@ import type { MobileModule } from '../panels/panelState';
 
 export type UiLayoutMode = 'image-priority' | 'controls-priority';
 
-export function applyLayoutMode(mode: UiLayoutMode, onResetMobileModule?: () => void): void {
-  document.documentElement.setAttribute('data-ui-layout', mode);
-  if (mode === 'controls-priority') {
+export function resolveResponsiveLayoutMode(mode: UiLayoutMode): UiLayoutMode {
+  return isMobileCompactViewport() ? 'image-priority' : mode;
+}
+
+export function applyLayoutMode(mode: UiLayoutMode, onResetMobileModule?: () => void): UiLayoutMode {
+  const resolvedMode = resolveResponsiveLayoutMode(mode);
+  document.documentElement.setAttribute('data-ui-layout', resolvedMode);
+  if (resolvedMode === 'controls-priority') {
     onResetMobileModule?.();
   }
+  return resolvedMode;
 }
 
 export function isMobileCompactViewport(): boolean {
@@ -21,11 +27,6 @@ export function getCurrentLayoutMode(): UiLayoutMode {
   return document.documentElement.getAttribute('data-ui-layout') === 'image-priority'
     ? 'image-priority'
     : 'controls-priority';
-}
-
-export function isWheelStickyContext(mobileModuleSelection: MobileModule): boolean {
-  return isImagePriorityMobileMode()
-    && mobileModuleSelection === 'wheels';
 }
 
 export function clampPreviewRatio(value: number): number {

@@ -29,6 +29,31 @@ import type { Mat3 } from '../../core/matrix/operations';
 
 const TWO_PI = Math.PI * 2;
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+interface WheelRenderMetrics {
+  centerDotRadius: number;
+  centerDotStrokeWidth: number;
+  tickLen: number;
+  subtleTickLen: number;
+  tickWidth: number;
+  subtleTickWidth: number;
+  mappingDotRadius: number;
+  selectedMappingDotRadius: number;
+  mappingLineWidth: number;
+  rangeArcWidth: number;
+  imageMarkerRadius: number;
+  imageMarkerOutlineRadius: number;
+  imageMarkerOutlineWidth: number;
+  pointerLineWidth: number;
+  pointerTipRadius: number;
+  pointerPivotRadius: number;
+  labelOffset: number;
+  showLabels: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Chromaticity-to-hue helper
 // ---------------------------------------------------------------------------
@@ -143,6 +168,54 @@ export class ColorWheel {
     return !!row?.classList.contains('wheels-compare-inside');
   }
 
+  private getCanvasInset(size: number): number {
+    return clampNumber(size * 0.12, 6, 16);
+  }
+
+  private getRenderedInnerRadius(radius: number, insideOutside: boolean): number {
+    // Keep the top rendered wheel as a real ring in inside/outside mode so the edit wheel stays legible below it.
+    return insideOutside ? radius * 0.62 : radius * 0.3;
+  }
+
+  private getRenderMetrics(radius: number, innerRadius: number, showLabels: boolean): WheelRenderMetrics {
+    const bandWidth = Math.max(radius - innerRadius, 1);
+    return {
+      centerDotRadius: clampNumber(radius * 0.042, 1.6, 3),
+      centerDotStrokeWidth: clampNumber(radius * 0.014, 0.75, 1),
+      tickLen: clampNumber(radius * 0.16, 5, 12),
+      subtleTickLen: clampNumber(radius * 0.14, 4, 10),
+      tickWidth: clampNumber(radius * 0.055, 2, 4),
+      subtleTickWidth: clampNumber(radius * 0.04, 1.5, 3),
+      mappingDotRadius: clampNumber(bandWidth * 0.32, 2.2, 10),
+      selectedMappingDotRadius: clampNumber(bandWidth * 0.38, 2.8, 12),
+      mappingLineWidth: clampNumber(bandWidth * 0.05, 1, 1.5),
+      rangeArcWidth: clampNumber(bandWidth * 0.1, 1.5, 4),
+      imageMarkerRadius: clampNumber(bandWidth * 0.16, 1.8, 4.5),
+      imageMarkerOutlineRadius: clampNumber(bandWidth * 0.26, 3, 7.5),
+      imageMarkerOutlineWidth: clampNumber(bandWidth * 0.04, 1, 1.5),
+      pointerLineWidth: clampNumber(innerRadius * 0.11, 1.1, 2.2),
+      pointerTipRadius: clampNumber(innerRadius * 0.2, 2.2, 4.2),
+      pointerPivotRadius: clampNumber(innerRadius * 0.12, 1.6, 2.6),
+      labelOffset: clampNumber(radius * 0.15, 7, 11),
+      showLabels,
+    };
+  }
+
+  private drawCenterMarker(
+    ctx: CanvasRenderingContext2D,
+    center: number,
+    radius: number,
+    strokeWidth: number,
+  ): void {
+    ctx.beginPath();
+    ctx.arc(center, center, radius, 0, TWO_PI);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = strokeWidth;
+    ctx.stroke();
+  }
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
@@ -177,6 +250,7 @@ export class ColorWheel {
     if (!rect) return;
     const dpr = window.devicePixelRatio || 1;
     const cssSize = Math.min(rect.width, rect.height, 360);
+    const inset = this.getCanvasInset(cssSize);
     this.canvas.style.width = cssSize + 'px';
     this.canvas.style.height = cssSize + 'px';
     this.canvas.width = cssSize * dpr;
@@ -184,7 +258,7 @@ export class ColorWheel {
     this.ctx.scale(dpr, dpr);
     this.size = cssSize;
     this.center = cssSize / 2;
-    this.radius = cssSize / 2 - 16;
+    this.radius = cssSize / 2 - inset;
     this.innerRadius = this.radius * 0.3;
   }
 
@@ -199,6 +273,7 @@ export class ColorWheel {
     ctx.clearRect(0, 0, this.size, this.size);
 
     const insideOutside = this.isInsideOutsideMode();
+    const metrics = this.getRenderMetrics(this.radius, this.innerRadius, !insideOutside && this.radius >= 32);
 
     switch (state.ui.activeLayer) {
       case 'calibration': {
@@ -224,14 +299,7 @@ export class ColorWheel {
       this.drawImageHueMarkers(ctx, state, this.center, this.radius, this.innerRadius);
     }
 
-    // White point indicator at center
-    ctx.beginPath();
-    ctx.arc(this.center, this.center, 3, 0, TWO_PI);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    this.drawCenterMarker(ctx, this.center, metrics.centerDotRadius, metrics.centerDotStrokeWidth);
   }
 
   // -----------------------------------------------------------------------
@@ -262,9 +330,12 @@ export class ColorWheel {
     canvas.height = cssSize * dpr;
     ctx.scale(dpr, dpr);
 
+    const insideOutside = this.isInsideOutsideMode();
+    const inset = this.getCanvasInset(cssSize);
     const center = cssSize / 2;
-    const radius = cssSize / 2 - 16;
-    const innerRadius = radius * 0.3;
+    const radius = cssSize / 2 - inset;
+    const innerRadius = this.getRenderedInnerRadius(radius, insideOutside);
+    const metrics = this.getRenderMetrics(radius, innerRadius, !insideOutside && radius >= 32);
 
     ctx.clearRect(0, 0, cssSize, cssSize);
 
@@ -303,16 +374,10 @@ export class ColorWheel {
         return;
     }
 
-    this.drawRenderedImageHueMarkers(ctx, state, center, radius, innerRadius);
-
-    // White point indicator
-    ctx.beginPath();
-    ctx.arc(center, center, 3, 0, TWO_PI);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    if (!insideOutside) {
+      this.drawRenderedImageHueMarkers(ctx, state, center, radius, innerRadius);
+      this.drawCenterMarker(ctx, center, metrics.centerDotRadius, metrics.centerDotStrokeWidth);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -384,6 +449,7 @@ export class ColorWheel {
    * is derived from calibrationToPrimaries(state.calibration).
    */
   private drawCalibrationMarkers(ctx: CanvasRenderingContext2D, state: AppState): void {
+    const metrics = this.getRenderMetrics(this.radius, this.innerRadius, !this.isInsideOutsideMode() && this.radius >= 32);
     const shiftedPrimaries = state.primaries;
 
     const markers = [
@@ -427,8 +493,8 @@ export class ColorWheel {
           this.center,
           hueToCanvasAngle(shiftedHue),
           this.radius,
-          10,
-          3,
+          metrics.subtleTickLen,
+          metrics.subtleTickWidth,
           m.color,
           null,
           true,
@@ -440,11 +506,12 @@ export class ColorWheel {
         this.center,
         hueToCanvasAngle(fixedHue),
         this.radius,
-        12,
-        4,
+        metrics.tickLen,
+        metrics.tickWidth,
         m.color,
-        m.label,
+        metrics.showLabels ? m.label : null,
         false,
+        metrics.labelOffset,
       );
     }
   }
@@ -458,8 +525,9 @@ export class ColorWheel {
     _state: AppState,
     center: number,
     radius: number,
-    _innerRadius: number,
+    innerRadius: number,
   ): void {
+    const metrics = this.getRenderMetrics(radius, innerRadius, !this.isInsideOutsideMode() && radius >= 32);
     const colors = [
       { xy: SRGB_RED_XY, color: '#ff3333', label: 'R' },
       { xy: SRGB_GREEN_XY, color: '#33cc33', label: 'G' },
@@ -469,7 +537,18 @@ export class ColorWheel {
     for (const c of colors) {
       const hue = xyToHue(c.xy[0], c.xy[1]);
       const canvasAngle = hueToCanvasAngle(hue);
-      this.drawRingTick(ctx, center, canvasAngle, radius, 12, 4, c.color, c.label, false);
+      this.drawRingTick(
+        ctx,
+        center,
+        canvasAngle,
+        radius,
+        metrics.tickLen,
+        metrics.tickWidth,
+        c.color,
+        metrics.showLabels ? c.label : null,
+        false,
+        metrics.labelOffset,
+      );
     }
   }
 
@@ -483,6 +562,7 @@ export class ColorWheel {
     color: string,
     label: string | null,
     subtle: boolean,
+    labelOffset = 11,
   ): void {
     const outerX = center + Math.cos(angle) * (outerRadius + (subtle ? 0 : 1));
     const outerY = center + Math.sin(angle) * (outerRadius + (subtle ? 0 : 1));
@@ -499,7 +579,7 @@ export class ColorWheel {
 
     if (!label) return;
 
-    const labelR = outerRadius + 11;
+    const labelR = outerRadius + labelOffset;
     const lx = center + Math.cos(angle) * labelR;
     const ly = center + Math.sin(angle) * labelR;
     ctx.fillStyle = '#fff';
@@ -518,6 +598,7 @@ export class ColorWheel {
   ): void {
     if (this.imageHuePeaks.length === 0) return;
 
+    const metrics = this.getRenderMetrics(radius, innerRadius, false);
     const markerR = innerRadius + (radius - innerRadius) * 0.72;
     for (const hue of this.imageHuePeaks) {
       const angle = hueToCanvasAngle(hue);
@@ -525,13 +606,13 @@ export class ColorWheel {
       const py = center + Math.sin(angle) * markerR;
 
       ctx.beginPath();
-      ctx.arc(px, py, 4.5, 0, TWO_PI);
+      ctx.arc(px, py, metrics.imageMarkerRadius, 0, TWO_PI);
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(px, py, 7.5, 0, TWO_PI);
+      ctx.arc(px, py, metrics.imageMarkerOutlineRadius, 0, TWO_PI);
       ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = metrics.imageMarkerOutlineWidth;
       ctx.stroke();
     }
   }
@@ -545,6 +626,7 @@ export class ColorWheel {
   ): void {
     if (this.imageHuePeaks.length === 0) return;
 
+    const metrics = this.getRenderMetrics(radius, innerRadius, false);
     const markerR = innerRadius + (radius - innerRadius) * 0.72;
     for (const sourceHue of this.imageHuePeaks) {
       const angle = hueToCanvasAngle(sourceHue);
@@ -552,13 +634,13 @@ export class ColorWheel {
       const py = center + Math.sin(angle) * markerR;
 
       ctx.beginPath();
-      ctx.arc(px, py, 4.5, 0, TWO_PI);
+      ctx.arc(px, py, metrics.imageMarkerRadius, 0, TWO_PI);
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(px, py, 7.5, 0, TWO_PI);
+      ctx.arc(px, py, metrics.imageMarkerOutlineRadius, 0, TWO_PI);
       ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = metrics.imageMarkerOutlineWidth;
       ctx.stroke();
     }
   }
@@ -568,6 +650,7 @@ export class ColorWheel {
   // -----------------------------------------------------------------------
 
   private drawMappingPoints(ctx: CanvasRenderingContext2D, state: AppState): void {
+    const metrics = this.getRenderMetrics(this.radius, this.innerRadius, false);
     const midR = (this.radius + this.innerRadius) / 2;
 
     for (const mapping of state.localMappings) {
@@ -588,7 +671,7 @@ export class ColorWheel {
         ctx.moveTo(sx, sy);
         ctx.lineTo(dx, dy);
         ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = metrics.mappingLineWidth;
         ctx.setLineDash([4, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
@@ -600,19 +683,19 @@ export class ColorWheel {
       ctx.beginPath();
       ctx.arc(this.center, this.center, midR + 8, rangeStart, rangeEnd);
       ctx.strokeStyle = `rgba(255,255,255,${0.15 + mapping.strength * 0.25})`;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = metrics.rangeArcWidth;
       ctx.stroke();
 
       // Source dot
       const isSelected = state.ui.selectedMappingId === mapping.id;
-      const dotSize = isSelected ? 12 : 10;
+      const dotSize = isSelected ? metrics.selectedMappingDotRadius : metrics.mappingDotRadius;
       ctx.beginPath();
       ctx.arc(sx, sy, dotSize, 0, TWO_PI);
       const [r, g, b] = hsvToRgb(mapping.srcHue, 0.8, 0.9);
       ctx.fillStyle = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
       ctx.fill();
       ctx.strokeStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.7)';
-      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.lineWidth = isSelected ? Math.max(metrics.mappingLineWidth + 0.75, 1.5) : metrics.mappingLineWidth;
       ctx.stroke();
     }
   }
@@ -628,6 +711,7 @@ export class ColorWheel {
     radius: number,
     innerRadius: number,
   ): void {
+    const metrics = this.getRenderMetrics(radius, innerRadius, false);
     const midR = (radius + innerRadius) / 2;
 
     for (const mapping of state.localMappings) {
@@ -636,7 +720,7 @@ export class ColorWheel {
       const dy = center + Math.sin(dstAngle) * midR;
 
       const isSelected = state.ui.selectedMappingId === mapping.id;
-      const dotSize = isSelected ? 12 : 10;
+      const dotSize = isSelected ? metrics.selectedMappingDotRadius : metrics.mappingDotRadius;
 
       ctx.beginPath();
       ctx.arc(dx, dy, dotSize, 0, TWO_PI);
@@ -644,7 +728,7 @@ export class ColorWheel {
       ctx.fillStyle = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
       ctx.fill();
       ctx.strokeStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.7)';
-      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.lineWidth = isSelected ? Math.max(metrics.mappingLineWidth + 0.75, 1.5) : metrics.mappingLineWidth;
       ctx.stroke();
     }
   }
@@ -655,6 +739,7 @@ export class ColorWheel {
 
   private drawGlobalHueCenter(ctx: CanvasRenderingContext2D, state: AppState): void {
     const { center, innerRadius } = this;
+    const metrics = this.getRenderMetrics(this.radius, this.innerRadius, false);
 
     const globalAngle = hueToCanvasAngle(state.globalHueShift);
     const pointerLen = innerRadius * 0.9;
@@ -669,22 +754,22 @@ export class ColorWheel {
     ctx.moveTo(tailX, tailY);
     ctx.lineTo(tipX, tipY);
     ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = metrics.pointerLineWidth;
     ctx.lineCap = 'round';
     ctx.stroke();
 
     // Pointer tip
     ctx.beginPath();
-    ctx.arc(tipX, tipY, 4.2, 0, TWO_PI);
+    ctx.arc(tipX, tipY, metrics.pointerTipRadius, 0, TWO_PI);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = metrics.centerDotStrokeWidth;
     ctx.stroke();
 
     // Pivot marker
     ctx.beginPath();
-    ctx.arc(center, center, 2.6, 0, TWO_PI);
+    ctx.arc(center, center, metrics.pointerPivotRadius, 0, TWO_PI);
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.fill();
   }

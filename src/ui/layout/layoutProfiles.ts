@@ -15,7 +15,6 @@ export interface LayoutProfile {
   mobileModuleSelection: MobileModule;
   controlsPriorityPreviewRatio: number;
   imagePriorityPreviewRatio: number;
-  wheelPinned: boolean;
   splitView: boolean;
   splitPosition: number;
   collapsedModules: Record<string, boolean>;
@@ -80,7 +79,6 @@ export function createDefaultLayoutProfile(): LayoutProfile {
     mobileModuleSelection: 'none',
     controlsPriorityPreviewRatio: 0.5,
     imagePriorityPreviewRatio: 2 / 3,
-    wheelPinned: false,
     splitView: false,
     splitPosition: 0.5,
     collapsedModules: {},
@@ -102,7 +100,6 @@ export function normalizeLayoutProfile(value: unknown, fallbackId: string): Layo
     mobileModuleSelection: normalizeMobileModule(raw.mobileModuleSelection),
     controlsPriorityPreviewRatio: clamp(Number(raw.controlsPriorityPreviewRatio), 0.38, 0.84, 0.5),
     imagePriorityPreviewRatio: clamp(Number(raw.imagePriorityPreviewRatio), 0.38, 0.84, 2 / 3),
-    wheelPinned: !!raw.wheelPinned,
     splitView: !!raw.splitView,
     splitPosition: clamp(Number(raw.splitPosition), 0, 1, 0.5),
     collapsedModules: normalizeCollapsedModules(raw.collapsedModules),

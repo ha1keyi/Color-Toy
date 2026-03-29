@@ -27,7 +27,7 @@ import {
   isMobileCompactViewport,
   isValidLayout,
   isValidMobileModule,
-  isWheelStickyContext,
+  resolveResponsiveLayoutMode,
   toggleMobileModuleSelection,
 } from './ui/layout/layoutState';
 import type { UiLayoutMode } from './ui/layout/layoutState';
@@ -41,6 +41,9 @@ let previewCanvas: HTMLCanvasElement | null = null;
 let renderedWheelCanvas: HTMLCanvasElement | null = null;
 let dominantImageHues: number[] = [];
 type ThemeMode = 'dark' | 'light';
+type WheelLayoutMode = 'split' | 'inside';
+type WheelMiniMode = 'hidden' | WheelLayoutMode;
+type WheelDisplayLayer = Exclude<AppState['ui']['activeLayer'], 'toning'>;
 const THEME_STORAGE_KEY = 'colorToy.theme';
 type NavigatorWithDeviceMemory = Navigator & { deviceMemory?: number };
 type MobileModule = 'none' | 'wheels' | 'calibration' | 'mapping' | 'toning' | 'color-management' | 'history' | 'presets';
@@ -53,6 +56,91 @@ interface BeforeInstallPromptEvent extends Event {
 function readCssVar(name: string, fallback: string): string {
   const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
+}
+
+function parsePixelValue(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function applyMiniWheelPreviewOffsets(x: number, y: number): void {
+  const root = document.documentElement;
+  root.style.setProperty('--wheels-mini-x', `${x}px`);
+  root.style.setProperty('--wheels-mini-y', `${y}px`);
+}
+
+function clampMiniWheelPreviewIntoViewport(): { x: number; y: number } | null {
+  const panel = document.getElementById('wheels-panel') as HTMLElement | null;
+  if (!panel || !isMobileCompactViewport() || !panel.classList.contains('wheels-mini-preview')) {
+    return null;
+  }
+
+  const root = document.documentElement;
+  const currentOffsetX = parsePixelValue(getComputedStyle(root).getPropertyValue('--wheels-mini-x'));
+  const currentOffsetY = parsePixelValue(getComputedStyle(root).getPropertyValue('--wheels-mini-y'));
+
+  applyMiniWheelPreviewOffsets(currentOffsetX, currentOffsetY);
+
+  const rect = panel.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    return { x: currentOffsetX, y: currentOffsetY };
+  }
+
+  const edgePad = 6;
+  const headerHeight = parsePixelValue(getComputedStyle(root).getPropertyValue('--header-height')) || 52;
+  const minTop = headerHeight + 4;
+  const maxRight = window.innerWidth - edgePad;
+  const maxBottom = window.innerHeight - edgePad;
+
+  let correctedX = currentOffsetX;
+  let correctedY = currentOffsetY;
+
+  if (rect.left < edgePad) {
+    correctedX += edgePad - rect.left;
+  }
+  if (rect.right > maxRight) {
+    correctedX -= rect.right - maxRight;
+  }
+  if (rect.top < minTop) {
+    correctedY += minTop - rect.top;
+  }
+  if (rect.bottom > maxBottom) {
+    correctedY -= rect.bottom - maxBottom;
+  }
+
+  if (correctedX !== currentOffsetX || correctedY !== currentOffsetY) {
+    applyMiniWheelPreviewOffsets(correctedX, correctedY);
+  }
+
+  return { x: correctedX, y: correctedY };
+}
+
+function scheduleMiniWheelPreviewClamp(): void {
+  clampMiniWheelPreviewIntoViewport();
+  if (miniWheelClampFrame) {
+    window.cancelAnimationFrame(miniWheelClampFrame);
+  }
+  miniWheelClampFrame = window.requestAnimationFrame(() => {
+    miniWheelClampFrame = 0;
+    clampMiniWheelPreviewIntoViewport();
+    window.requestAnimationFrame(() => {
+      clampMiniWheelPreviewIntoViewport();
+    });
+  });
+}
+
+function scheduleWheelSurfaceRefresh(): void {
+  if (wheelSurfaceRefreshFrame) {
+    window.cancelAnimationFrame(wheelSurfaceRefreshFrame);
+  }
+
+  wheelSurfaceRefreshFrame = window.requestAnimationFrame(() => {
+    wheelSurfaceRefreshFrame = 0;
+    colorWheel.resize();
+    requestUiRender('wheel');
+    scheduleMiniWheelPreviewClamp();
+  });
 }
 
 const HISTOGRAM_INTERVAL_DESKTOP = 1000 / 10;
@@ -85,6 +173,12 @@ let _mobileCalibrationPrimary: 'none' | 'xy' | 'red' | 'green' | 'blue' = 'none'
 let _mobileMappingMode: 'global' | 'point' = 'global';
 let _mobileMappingControl: 'picker' | 'src' | 'dst' | 'range' | 'strength' = 'picker';
 let _mobileToningControl: 'contrast' | 'exposure' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'curve' = 'contrast';
+let _wheelPanelMode: WheelLayoutMode = 'split';
+let _wheelPanelModeTouched = false;
+let _wheelMiniMode: WheelMiniMode = 'inside';
+let _lastWheelDisplayLayer: WheelDisplayLayer = 'calibration';
+let miniWheelClampFrame = 0;
+let wheelSurfaceRefreshFrame = 0;
 let _previewControlsManuallyResized = false;
 
 function isCoarsePointerDevice(): boolean {
@@ -137,10 +231,11 @@ function flushUiRenderQueue(time: number): void {
 
   if (wheelRenderPending && colorWheel) {
     wheelRenderPending = false;
-    colorWheel.setState(state);
-    colorWheel.draw(state);
+    const wheelState = getWheelRenderState(state);
+    colorWheel.setState(wheelState);
+    colorWheel.draw(wheelState);
     if (renderedWheelCanvas) {
-      colorWheel.drawRendered(state, renderedWheelCanvas);
+      colorWheel.drawRendered(wheelState, renderedWheelCanvas);
     }
   }
 
@@ -268,7 +363,7 @@ function init(): void {
 }
 
 function setMobileModuleSelection(value: MobileModule): void {
-  _mobileModuleSelection = value;
+  _mobileModuleSelection = value === 'color-management' ? 'none' : value;
   syncMobileModuleBarSelection();
 }
 
@@ -278,6 +373,77 @@ function syncMobileModuleBarSelection(): void {
     const moduleName = btn.dataset.mobileModule as MobileModule | undefined;
     btn.classList.toggle('active', moduleName === _mobileModuleSelection);
   });
+}
+
+function ensureDefaultWheelModes(): void {
+  if (_wheelPanelModeTouched) return;
+  const prefersInsideMode = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  _wheelPanelMode = prefersInsideMode ? 'inside' : 'split';
+}
+
+function trackWheelDisplayLayer(state: AppState): void {
+  if (state.ui.activeLayer === 'calibration' || state.ui.activeLayer === 'mapping') {
+    _lastWheelDisplayLayer = state.ui.activeLayer;
+  }
+}
+
+function getWheelDisplayLayer(state: AppState): WheelDisplayLayer {
+  if (state.ui.activeLayer === 'calibration' || state.ui.activeLayer === 'mapping') {
+    return state.ui.activeLayer;
+  }
+
+  const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  if (imagePriorityMobile && _mobileModuleSelection === 'wheels') {
+    return _lastWheelDisplayLayer;
+  }
+
+  return _lastWheelDisplayLayer;
+}
+
+function getWheelRenderState(state: AppState): AppState {
+  const wheelLayer = getWheelDisplayLayer(state);
+  if (wheelLayer === state.ui.activeLayer) {
+    return state;
+  }
+
+  return {
+    ...state,
+    ui: {
+      ...state.ui,
+      activeLayer: wheelLayer,
+      colorPickerActive: wheelLayer === 'mapping' ? state.ui.colorPickerActive : false,
+    },
+  };
+}
+
+function getActiveWheelLayoutMode(_state: AppState): WheelLayoutMode {
+  const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  if (imagePriorityMobile && _mobileModuleSelection !== 'wheels') {
+    return _wheelMiniMode === 'inside' ? 'inside' : 'split';
+  }
+  return _wheelPanelMode;
+}
+
+function applyWheelLayoutModeUI(state: AppState): void {
+  const btn = document.getElementById('wheel-compare-btn') as HTMLButtonElement | null;
+  const row = document.getElementById('wheels-row') as HTMLElement | null;
+  if (!btn || !row) return;
+
+  const activeMode = getActiveWheelLayoutMode(state);
+  row.classList.remove('wheels-compare-swap', 'wheels-compare-inside');
+  if (activeMode === 'inside') {
+    row.classList.add('wheels-compare-inside');
+  }
+  btn.textContent = _wheelPanelMode === 'inside' ? 'Panel: In/Out' : 'Panel: L/R';
+}
+
+function shouldShowMiniWheelPreview(state: AppState): boolean {
+  const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  if (!imagePriorityMobile || _mobileModuleSelection === 'wheels' || _wheelMiniMode === 'hidden') {
+    return false;
+  }
+
+  return true;
 }
 
 function applyTheme(theme: ThemeMode, button?: HTMLButtonElement | null): void {
@@ -371,6 +537,7 @@ function setupCompareHint(): void {
 // ============ State Change Handler ============
 
 function onStateChange(state: AppState, _prev: AppState): void {
+  trackWheelDisplayLayer(state);
   renderer.updateUniforms(state);
   renderer.requestRender();
   renderer.render();
@@ -947,25 +1114,15 @@ function updateSplitDividerUI(state: AppState): void {
 
 function setupWheelCompareToggle(): void {
   const btn = document.getElementById('wheel-compare-btn');
-  const row = document.getElementById('wheels-row');
-  if (!btn || !row) return;
+  if (!btn) return;
 
-  const labels = ['Compare: Left/Right', 'Compare: Inside/Outside'];
-  let mode = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority' ? 1 : 0;
-
-  const applyMode = () => {
-    row.classList.remove('wheels-compare-swap', 'wheels-compare-inside');
-    if (mode === 1) row.classList.add('wheels-compare-inside');
-    btn.textContent = labels[mode];
-
-    // Force immediate redraw so marker visibility/positions reflect mode switch.
-    requestUiRender('wheel');
-  };
-
-  applyMode();
+  ensureDefaultWheelModes();
+  applyWheelLayoutModeUI(store.getState());
   btn.addEventListener('click', () => {
-    mode = (mode + 1) % labels.length;
-    applyMode();
+    _wheelPanelModeTouched = true;
+    _wheelPanelMode = _wheelPanelMode === 'inside' ? 'split' : 'inside';
+    applyWheelLayoutModeUI(store.getState());
+    requestUiRender('wheel');
   });
 }
 
@@ -1013,17 +1170,28 @@ function setupLayoutControls(): void {
     label.textContent = mode === 'image-priority' ? 'Layout: Image' : 'Layout: Controls';
   };
 
-  const layoutStored = window.localStorage.getItem(UI_LAYOUT_STORAGE_KEY);
+  const getStoredLayoutPreference = (): UiLayoutMode => {
+    const layoutStored = window.localStorage.getItem(UI_LAYOUT_STORAGE_KEY);
+    return isValidLayout(layoutStored || '')
+      ? layoutStored as UiLayoutMode
+      : 'controls-priority';
+  };
 
-  let initialLayout: UiLayoutMode = isValidLayout(layoutStored || '')
-    ? layoutStored as UiLayoutMode
-    : 'controls-priority';
+  const syncLayoutToggleVisibility = () => {
+    if (!layoutToggleBtn) return;
+    layoutToggleBtn.style.display = isMobileCompactViewport() ? 'none' : '';
+  };
 
-  // On mobile compact view, always use image-priority and hide the toggle control
-  if (isMobileCompactViewport()) {
-    initialLayout = 'image-priority';
-    if (layoutToggleBtn) layoutToggleBtn.style.display = 'none';
-  }
+  const applyResponsiveLayout = (requestedMode: UiLayoutMode): UiLayoutMode => {
+    const appliedMode = applyLayoutMode(requestedMode, () => {
+      setMobileModuleSelection('none');
+    });
+    updateLayoutButton(appliedMode);
+    return appliedMode;
+  };
+
+  const initialRequestedLayout = getStoredLayoutPreference();
+  syncLayoutToggleVisibility();
 
   const controlsStored = parseFloat(window.localStorage.getItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}controls-priority`) || '');
   const imageStored = parseFloat(window.localStorage.getItem(`${PREVIEW_SPLIT_STORAGE_PREFIX}image-priority`) || '');
@@ -1040,36 +1208,33 @@ function setupLayoutControls(): void {
     },
   });
 
-  applyLayoutMode(initialLayout, () => {
-    setMobileModuleSelection('none');
-  });
-
-  updateLayoutButton(initialLayout);
+  applyResponsiveLayout(initialRequestedLayout);
 
   if (layoutToggleBtn) {
     layoutToggleBtn.addEventListener('click', () => {
       const current = getCurrentLayoutMode();
       const selected = current === 'controls-priority' ? 'image-priority' : 'controls-priority';
       window.localStorage.setItem(UI_LAYOUT_STORAGE_KEY, selected);
-      applyLayoutMode(selected, () => {
-        setMobileModuleSelection('none');
-      });
-      if (selected === 'controls-priority') {
-        const state = store.getState();
-        if (state.ui.wheelPinned) {
-          store.update({
-            ui: {
-              ...state.ui,
-              wheelPinned: false,
-            },
-          });
-        }
-      }
-      updateLayoutButton(selected);
+      applyResponsiveLayout(selected);
       updatePanelUI(store.getState());
       handleResize();
     });
   }
+
+  window.addEventListener('resize', () => {
+    syncLayoutToggleVisibility();
+
+    const currentMode = getCurrentLayoutMode();
+    const requestedMode = getStoredLayoutPreference();
+    const resolvedMode = resolveResponsiveLayoutMode(requestedMode);
+    if (currentMode === resolvedMode) {
+      updateLayoutButton(currentMode);
+      return;
+    }
+
+    applyResponsiveLayout(requestedMode);
+    updatePanelUI(store.getState());
+  });
 }
 
 function setupLayoutProfileControls(): void {
@@ -1102,18 +1267,17 @@ function setupLayoutProfileControls(): void {
 }
 
 function setupWheelControls(): void {
-  const pinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
+  const miniVisibilityBtn = document.getElementById('wheel-mini-visibility-btn') as HTMLButtonElement | null;
 
-  if (pinBtn) {
-    pinBtn.addEventListener('click', () => {
-      const state = store.getState();
-      const stickyContext = isWheelStickyContext(_mobileModuleSelection);
-      store.update({
-        ui: {
-          ...state.ui,
-          wheelPinned: stickyContext ? !state.ui.wheelPinned : false,
-        },
-      });
+  if (miniVisibilityBtn) {
+    miniVisibilityBtn.addEventListener('click', () => {
+      _wheelMiniMode = _wheelMiniMode === 'inside'
+        ? 'split'
+        : _wheelMiniMode === 'split'
+          ? 'hidden'
+          : 'inside';
+      updatePanelUI(store.getState());
+      requestUiRender('wheel');
       handleResize();
     });
   }
@@ -1137,7 +1301,7 @@ function applyPreviewControlsSplit(state: AppState): void {
   divider.classList.toggle('active', dividerVisible);
   const autoOverlayMode = layoutMode === 'image-priority'
     && !_previewControlsManuallyResized
-    && _mobileModuleSelection !== 'wheels';
+    && _mobileModuleSelection !== 'none';
   if (autoOverlayMode) {
     app.style.setProperty('--preview-controls-ratio', '1');
     app.style.setProperty('--controls-flex-ratio', '0');
@@ -1247,20 +1411,11 @@ function setupMobileModuleBar(): void {
         }
       }
 
-      if (_mobileModuleSelection === 'none') {
-        const state = store.getState();
-        if (state.ui.wheelPinned) {
-          store.update({
-            ui: {
-              ...state.ui,
-              wheelPinned: false,
-            },
-          });
-        }
-      }
-
       updatePanelUI(store.getState());
       handleResize();
+      window.setTimeout(() => {
+        clampMiniWheelPreviewIntoViewport();
+      }, 0);
     });
   });
 
@@ -1277,23 +1432,23 @@ function setupWheelsDock(): void {
   dockBtn.addEventListener('click', () => {
     if (!isMobileCompactViewport() || getCurrentLayoutMode() !== 'image-priority') return;
 
+    ensureDefaultWheelModes();
     const next: MobileModule = _mobileModuleSelection === 'wheels' ? 'none' : 'wheels';
-    if (next === 'wheels') {
-      const row = document.getElementById('wheels-row');
-      const compareBtn = document.getElementById('wheel-compare-btn') as HTMLButtonElement | null;
-      if (row instanceof HTMLElement && !row.classList.contains('wheels-compare-inside') && compareBtn) {
-        compareBtn.click();
-      }
-    }
     setMobileModuleSelection(next);
     updatePanelUI(store.getState());
     handleResize();
+    window.setTimeout(() => {
+      clampMiniWheelPreviewIntoViewport();
+    }, 0);
   });
 }
 
 function setupMiniWheelsDrag(): void {
   const panel = document.getElementById('wheels-panel') as HTMLElement | null;
-  if (!panel) return;
+  if (!panel) {
+    return;
+  }
+  const controls = document.getElementById('controls') as HTMLElement | null;
 
   const root = document.documentElement;
   let dragging = false;
@@ -1304,56 +1459,31 @@ function setupMiniWheelsDrag(): void {
   let startOffsetY = 0;
   let currentOffsetX = 0;
   let currentOffsetY = 0;
+  let syncFrame = 0;
 
-  const parsePx = (value: string | null | undefined): number => {
-    if (!value) return 0;
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
+  const isMiniPreviewVisible = (): boolean => {
+    if (!isMobileCompactViewport() || getCurrentLayoutMode() !== 'image-priority') return false;
+    return panel.classList.contains('wheels-mini-preview');
   };
 
   const isDraggableMiniPreview = (): boolean => {
-    if (!isMobileCompactViewport() || getCurrentLayoutMode() !== 'image-priority') return false;
-    if (!panel.classList.contains('wheels-mini-preview')) return false;
+    if (!isMiniPreviewVisible()) return false;
     return _mobileModuleSelection !== 'wheels';
   };
 
   const applyOffsets = (x: number, y: number): void => {
     currentOffsetX = x;
     currentOffsetY = y;
-    root.style.setProperty('--wheels-mini-x', `${x}px`);
-    root.style.setProperty('--wheels-mini-y', `${y}px`);
+    applyMiniWheelPreviewOffsets(x, y);
   };
 
   const clampAndApply = (x: number, y: number): void => {
     applyOffsets(x, y);
 
-    const rect = panel.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-
-    const edgePad = 6;
-    const headerHeight = parsePx(getComputedStyle(root).getPropertyValue('--header-height')) || 52;
-    const minTop = headerHeight + 4;
-    const maxRight = window.innerWidth - edgePad;
-    const maxBottom = window.innerHeight - edgePad;
-
-    let correctedX = currentOffsetX;
-    let correctedY = currentOffsetY;
-
-    if (rect.left < edgePad) {
-      correctedX += edgePad - rect.left;
-    }
-    if (rect.right > maxRight) {
-      correctedX -= rect.right - maxRight;
-    }
-    if (rect.top < minTop) {
-      correctedY += minTop - rect.top;
-    }
-    if (rect.bottom > maxBottom) {
-      correctedY -= rect.bottom - maxBottom;
-    }
-
-    if (correctedX !== currentOffsetX || correctedY !== currentOffsetY) {
-      applyOffsets(correctedX, correctedY);
+    const clamped = clampMiniWheelPreviewIntoViewport();
+    if (clamped) {
+      currentOffsetX = clamped.x;
+      currentOffsetY = clamped.y;
     }
   };
 
@@ -1364,20 +1494,40 @@ function setupMiniWheelsDrag(): void {
     );
   };
 
-  const restoreOffsets = (): void => {
+  const loadStoredOffsets = (): void => {
     try {
       const raw = window.localStorage.getItem(WHEELS_MINI_POSITION_STORAGE_KEY);
       if (!raw) {
-        clampAndApply(0, 0);
+        applyOffsets(0, 0);
         return;
       }
       const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown };
       const x = typeof parsed.x === 'number' && Number.isFinite(parsed.x) ? parsed.x : 0;
       const y = typeof parsed.y === 'number' && Number.isFinite(parsed.y) ? parsed.y : 0;
-      clampAndApply(x, y);
+      applyOffsets(x, y);
     } catch {
-      clampAndApply(0, 0);
+      applyOffsets(0, 0);
     }
+  };
+
+  const syncPositionNow = (): void => {
+    if (!isMiniPreviewVisible()) return;
+    const clamped = clampMiniWheelPreviewIntoViewport();
+    if (clamped) {
+      currentOffsetX = clamped.x;
+      currentOffsetY = clamped.y;
+    }
+  };
+
+  const syncPosition = (): void => {
+    syncPositionNow();
+    if (syncFrame) {
+      window.cancelAnimationFrame(syncFrame);
+    }
+    syncFrame = window.requestAnimationFrame(() => {
+      syncFrame = 0;
+      syncPositionNow();
+    });
   };
 
   panel.addEventListener('pointerdown', (event) => {
@@ -1385,6 +1535,7 @@ function setupMiniWheelsDrag(): void {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     const target = event.target as HTMLElement | null;
+    if (!target?.closest('.wheels-mini-drag-handle')) return;
     if (target?.closest('button,input,select,textarea,a')) return;
 
     dragging = true;
@@ -1392,8 +1543,8 @@ function setupMiniWheelsDrag(): void {
     startClientX = event.clientX;
     startClientY = event.clientY;
 
-    startOffsetX = parsePx(getComputedStyle(root).getPropertyValue('--wheels-mini-x'));
-    startOffsetY = parsePx(getComputedStyle(root).getPropertyValue('--wheels-mini-y'));
+    startOffsetX = parsePixelValue(getComputedStyle(root).getPropertyValue('--wheels-mini-x'));
+    startOffsetY = parsePixelValue(getComputedStyle(root).getPropertyValue('--wheels-mini-y'));
 
     panel.classList.add('is-dragging');
     panel.setPointerCapture(event.pointerId);
@@ -1423,54 +1574,65 @@ function setupMiniWheelsDrag(): void {
   window.addEventListener('pointercancel', (event) => finishDrag(event.pointerId));
   panel.addEventListener('lostpointercapture', () => finishDrag());
 
-  window.addEventListener('resize', () => {
-    clampAndApply(currentOffsetX, currentOffsetY);
-  });
+  window.addEventListener('resize', syncPosition);
 
-  restoreOffsets();
+  const syncObserver = new MutationObserver(() => {
+    syncPosition();
+  });
+  syncObserver.observe(panel, { attributes: true, attributeFilter: ['class', 'style'] });
+  if (controls) {
+    syncObserver.observe(controls, {
+      attributes: true,
+      attributeFilter: ['class', 'data-mobile-module', 'data-wheel-mini-mode', 'data-wheel-layer'],
+    });
+  }
+
+  loadStoredOffsets();
+  syncPosition();
 }
 
 function syncIsolatedOverlayBottomOffset(state: AppState): void {
   const controls = document.getElementById('controls') as HTMLElement | null;
   if (!controls) return;
 
+  void state;
+  controls.style.removeProperty('--isolated-overlay-extra-bottom');
+}
+
+function syncMiniWheelPreviewOffset(state: AppState): void {
+  const controls = document.getElementById('controls') as HTMLElement | null;
+  if (!controls) return;
+
   const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
-  if (!imagePriorityMobile || !state.imageLoaded) {
-    controls.style.removeProperty('--isolated-overlay-extra-bottom');
+  if (!imagePriorityMobile || !shouldShowMiniWheelPreview(state)) {
+    controls.style.removeProperty('--wheels-mini-preview-offset');
     return;
   }
 
-  const moduleToPanel: Record<MobileModule, string | null> = {
-    none: null,
-    wheels: null,
-    history: null,
-    presets: null,
-    calibration: 'calibration-panel',
-    mapping: 'mapping-panel',
-    toning: 'toning-panel',
-    'color-management': 'color-management-panel',
-  };
+  const candidates = [
+    'panels',
+    'history-panel',
+    'bottom-bar',
+    'color-management-panel',
+    'isolated-cal-sliders',
+    'isolated-controls-sliders',
+  ]
+    .map((id) => document.getElementById(id) as HTMLElement | null)
+    .filter((element): element is HTMLElement => !!element);
 
-  const panelId = moduleToPanel[_mobileModuleSelection];
-  const panel = panelId ? document.getElementById(panelId) as HTMLElement | null : null;
-  if (!panel) {
-    controls.style.removeProperty('--isolated-overlay-extra-bottom');
-    return;
-  }
+  let extraBottom = 10;
+  candidates.forEach((element) => {
+    const style = getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden') return;
 
-  const panelStyle = getComputedStyle(panel);
-  if (panelStyle.display === 'none') {
-    controls.style.removeProperty('--isolated-overlay-extra-bottom');
-    return;
-  }
+    const rect = element.getBoundingClientRect();
+    if (rect.height < 1 || rect.top >= window.innerHeight) return;
 
-  // Use the shared panel stack height so overlay sliders clear module rails consistently.
-  const panelStack = panel.closest('#panels') as HTMLElement | null;
-  const offsetAnchor = panelStack ?? panel;
-  const rect = offsetAnchor.getBoundingClientRect();
-  const moduleGap = _mobileModuleSelection === 'mapping' ? 16 : 12;
-  const extraBottom = Math.max(68, Math.round(rect.height + moduleGap));
-  controls.style.setProperty('--isolated-overlay-extra-bottom', `${extraBottom}px`);
+    const candidateOffset = Math.round(window.innerHeight - rect.top + 10);
+    extraBottom = Math.max(extraBottom, candidateOffset);
+  });
+
+  controls.style.setProperty('--wheels-mini-preview-offset', `${extraBottom}px`);
 }
 
 function setupMobileSubmoduleControls(): void {
@@ -2995,10 +3157,21 @@ function syncCompactAdjustmentHeader(adjustmentMode: boolean): void {
 // ============ UI Updates ============
 
 function updatePanelUI(state: AppState): void {
+  ensureDefaultWheelModes();
+  trackWheelDisplayLayer(state);
+  const wheelsPanel = document.getElementById('wheels-panel') as HTMLElement | null;
+  const panels = document.getElementById('panels') as HTMLElement | null;
+  const previousWheelDisplay = wheelsPanel?.style.display ?? '';
+  const previousMiniPreview = wheelsPanel?.classList.contains('wheels-mini-preview') ?? false;
+  const previousPanelsDisplay = panels?.style.display ?? '';
+
   updatePanelState(state, {
     isImagePriorityMobileMode,
     getCurrentLayoutMode,
     mobileModuleSelection: _mobileModuleSelection,
+    mobileMappingMode: _mobileMappingMode,
+    wheelMiniMode: _wheelMiniMode,
+    wheelDisplayLayer: getWheelDisplayLayer(state),
     onSelectMapping: (id, currentState) => {
       store.update({
         ui: { ...currentState.ui, selectedMappingId: id },
@@ -3025,7 +3198,9 @@ function updatePanelUI(state: AppState): void {
   }
   if (toningPanel) toningPanel.setAttribute('data-toning-control', _mobileToningControl);
 
+  applyWheelLayoutModeUI(state);
   syncIsolatedOverlayBottomOffset(state);
+  syncMiniWheelPreviewOffset(state);
 
   const syncActive = (selector: string, key: string, value: string) => {
     document.querySelectorAll(selector).forEach((el) => {
@@ -3040,8 +3215,8 @@ function updatePanelUI(state: AppState): void {
   syncActive('#toning-control-tabs [data-toning-control]', 'toningControl', _mobileToningControl);
 
   const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
-  const adjustmentMode = imagePriorityMobile && (_mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning');
-  const autoOverlay = imagePriorityMobile && !_previewControlsManuallyResized && _mobileModuleSelection !== 'wheels';
+  const adjustmentMode = imagePriorityMobile && (_mobileModuleSelection === 'wheels' || _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning');
+  const autoOverlay = imagePriorityMobile && !_previewControlsManuallyResized && _mobileModuleSelection !== 'none';
 
   if (app) app.classList.toggle('auto-overlay-mode', autoOverlay);
   if (app) app.classList.toggle('compact-adjustment-mode', adjustmentMode);
@@ -3067,20 +3242,38 @@ function updatePanelUI(state: AppState): void {
     controls.dataset.mappingMode = _mobileModuleSelection === 'mapping' ? _mobileMappingMode : '';
     controls.dataset.mappingControl = _mobileModuleSelection === 'mapping' ? _mobileMappingControl : '';
     controls.dataset.toningControl = _mobileModuleSelection === 'toning' ? _mobileToningControl : '';
+    controls.dataset.wheelMiniMode = _wheelMiniMode;
+    controls.dataset.wheelLayer = getWheelDisplayLayer(state);
   }
 
   if (dockBtn) {
     const shouldShowDock = imagePriorityMobile;
-    const wheelsRow = document.getElementById('wheels-row');
-    const insideMode = wheelsRow instanceof HTMLElement && wheelsRow.classList.contains('wheels-compare-inside');
     dockBtn.style.display = shouldShowDock ? 'inline-flex' : 'none';
     dockBtn.classList.toggle('active', _mobileModuleSelection === 'wheels');
     dockBtn.classList.toggle('mode-in', _mobileModuleSelection === 'wheels');
     dockBtn.classList.toggle('mode-out', _mobileModuleSelection !== 'wheels');
     dockBtn.title = _mobileModuleSelection === 'wheels'
       ? 'Hide Wheels'
-      : (insideMode ? 'Show Wheels (In/Out)' : 'Show Wheels');
+      : _wheelMiniMode === 'hidden'
+        ? 'Show Wheels Panel'
+        : _wheelMiniMode === 'inside'
+          ? 'Show Wheels (In/Out)'
+          : 'Show Wheels (L/R)';
   }
+
+  const nextWheelDisplay = wheelsPanel?.style.display ?? '';
+  const nextMiniPreview = wheelsPanel?.classList.contains('wheels-mini-preview') ?? false;
+  const nextPanelsDisplay = panels?.style.display ?? '';
+  if (
+    previousWheelDisplay !== nextWheelDisplay
+    || previousMiniPreview !== nextMiniPreview
+    || previousPanelsDisplay !== nextPanelsDisplay
+  ) {
+    scheduleWheelSurfaceRefresh();
+    return;
+  }
+
+  scheduleMiniWheelPreviewClamp();
 }
 
 function updateCapabilitiesDisplay(): void {
@@ -3117,6 +3310,8 @@ function handleResize(): void {
   // Redraw diagrams
   if (state.ui.activeLayer === 'calibration') drawXYDiagram(state);
   if (state.ui.activeLayer === 'toning') drawToneCurve();
+
+  scheduleMiniWheelPreviewClamp();
 
   if (previewCanvas) {
     const container = document.getElementById('preview-container');

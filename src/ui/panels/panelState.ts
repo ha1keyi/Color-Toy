@@ -12,6 +12,9 @@ interface PanelStateDeps {
   isImagePriorityMobileMode: () => boolean;
   getCurrentLayoutMode: () => 'image-priority' | 'controls-priority';
   mobileModuleSelection: MobileModule;
+  mobileMappingMode: 'global' | 'point';
+  wheelMiniMode: 'hidden' | 'split' | 'inside';
+  wheelDisplayLayer: 'calibration' | 'mapping';
   onSelectMapping: (id: string, state: AppState) => void;
   applyPreviewControlsSplit: (state: AppState) => void;
   updateSplitDividerUI: (state: AppState) => void;
@@ -49,6 +52,10 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
 
   const wheelsAvailableByLayer = state.ui.activeLayer !== 'toning' || deps.mobileModuleSelection === 'wheels';
   const calibrationActive = state.ui.activeLayer === 'calibration';
+  const imagePriorityMobile = deps.isImagePriorityMobileMode();
+  const showMiniWheelPreview = imagePriorityMobile
+    && deps.mobileModuleSelection !== 'wheels'
+    && deps.wheelMiniMode !== 'hidden';
 
   if (wheelsPanel) wheelsPanel.style.display = wheelsAvailableByLayer ? 'block' : 'none';
   if (calibrationPanel) calibrationPanel.style.display = calibrationActive ? 'block' : 'none';
@@ -61,19 +68,14 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     wheelsRow.style.display = wheelsAvailableByLayer && !wheelsCollapsed ? 'flex' : 'none';
   }
 
-  const imagePriorityMobile = deps.isImagePriorityMobileMode();
-  const stickyContext = imagePriorityMobile && deps.mobileModuleSelection !== 'none';
-  const wheelRowPinned = stickyContext && state.ui.wheelPinned;
+  const moduleOverlayOpen = imagePriorityMobile && deps.mobileModuleSelection !== 'none';
   if (mobileBar) {
     mobileBar.classList.toggle('active', imagePriorityMobile);
   }
 
   if (controls) {
     controls.classList.toggle('image-priority-mode', imagePriorityMobile);
-    controls.classList.toggle('module-open', stickyContext);
-    controls.classList.toggle('wheel-sticky-context', stickyContext);
-    controls.classList.toggle('wheel-pinned', wheelRowPinned);
-    controls.style.setProperty('--wheel-controls-sticky-offset', '0px');
+    controls.classList.toggle('module-open', moduleOverlayOpen);
   }
 
   if (imagePriorityMobile) {
@@ -85,10 +87,11 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
       || deps.mobileModuleSelection === 'calibration'
       || deps.mobileModuleSelection === 'mapping'
       || deps.mobileModuleSelection === 'toning';
+    const showPanelsShell = layerSelection || showMiniWheelPreview;
     const presetsSelection = deps.mobileModuleSelection === 'presets';
     const colorManagementSelection = deps.mobileModuleSelection === 'color-management';
     if (panels) {
-      panels.style.display = layerSelection ? 'block' : 'none';
+      panels.style.display = showPanelsShell ? 'block' : 'none';
     }
 
     if (bottomBar) {
@@ -106,9 +109,8 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
 
     if (wheelsPanel) {
       const wheelsSelection = deps.mobileModuleSelection === 'wheels';
-      const wheelsPreviewSelection = deps.mobileModuleSelection !== 'wheels';
-      wheelsPanel.style.display = wheelsSelection || wheelsPreviewSelection ? 'block' : 'none';
-      wheelsPanel.classList.toggle('wheels-mini-preview', wheelsPreviewSelection);
+      wheelsPanel.style.display = wheelsSelection || showMiniWheelPreview ? 'block' : 'none';
+      wheelsPanel.classList.toggle('wheels-mini-preview', showMiniWheelPreview);
       if (wheelsSelection) forceExpanded('wheels-panel', 'wheels-collapse-btn');
     }
     if (calibrationPanel) {
@@ -134,8 +136,7 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
 
     if (wheelsRow) {
       const wheelsSelection = deps.mobileModuleSelection === 'wheels';
-      const wheelsPreviewSelection = deps.mobileModuleSelection !== 'wheels';
-      const shouldShowWheels = wheelsSelection || wheelsPreviewSelection;
+      const shouldShowWheels = wheelsSelection || showMiniWheelPreview;
       const wheelsCollapsed = wheelsSelection && (wheelsPanel?.classList.contains('is-collapsed') ?? false);
       wheelsRow.style.display = shouldShowWheels && !wheelsCollapsed ? 'flex' : 'none';
     }
@@ -177,16 +178,21 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     holdCompareBtn.disabled = !state.imageLoaded;
   }
 
-  const wheelPinBtn = document.getElementById('wheel-pin-btn') as HTMLButtonElement | null;
-  if (wheelPinBtn) {
-    wheelPinBtn.style.display = stickyContext ? 'inline-flex' : 'none';
-    wheelPinBtn.classList.toggle('active', wheelRowPinned);
-    wheelPinBtn.setAttribute('aria-pressed', String(wheelRowPinned));
-    wheelPinBtn.textContent = wheelRowPinned ? 'Pin: On' : 'Pin: Off';
-    wheelPinBtn.disabled = !stickyContext;
-    wheelPinBtn.title = stickyContext
-      ? 'Pin wheel area while scrolling'
-      : 'Pin is available in image-priority mode with an opened module';
+  const wheelMiniVisibilityBtn = document.getElementById('wheel-mini-visibility-btn') as HTMLButtonElement | null;
+  if (wheelMiniVisibilityBtn) {
+    wheelMiniVisibilityBtn.style.display = imagePriorityMobile ? 'inline-flex' : 'none';
+    wheelMiniVisibilityBtn.classList.toggle('active', deps.wheelMiniMode !== 'hidden');
+    wheelMiniVisibilityBtn.setAttribute('aria-pressed', String(deps.wheelMiniMode !== 'hidden'));
+    wheelMiniVisibilityBtn.textContent = deps.wheelMiniMode === 'inside'
+      ? 'Mini: In/Out'
+      : deps.wheelMiniMode === 'split'
+        ? 'Mini: L/R'
+        : 'Mini: Off';
+    wheelMiniVisibilityBtn.title = deps.wheelMiniMode === 'inside'
+      ? 'Minimized wheels use inside/outside mode'
+      : deps.wheelMiniMode === 'split'
+        ? 'Minimized wheels use left/right mode'
+        : 'Minimized wheels are hidden outside the wheels module';
   }
 
   const mappingPickerBtn = document.getElementById('add-mapping-picker-btn') as HTMLButtonElement | null;

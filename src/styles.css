@@ -251,6 +251,14 @@ body {
   position: relative;
 }
 
+#control-module-shell {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
 #isolated-cal-sliders,
 #isolated-controls-sliders {
   position: absolute;
@@ -914,6 +922,10 @@ body {
   padding: 0 4px;
 }
 
+.wheels-mini-drag-handle {
+  display: none;
+}
+
 #wheels-panel .panel-header-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -923,15 +935,13 @@ body {
   flex: 0 0 auto;
 }
 
-#wheel-pin-btn {
-  min-width: 82px;
+#wheel-mini-visibility-btn {
+  min-width: 94px;
   text-align: center;
-  justify-content: center;
-  align-items: center;
 }
 
 #wheel-compare-btn {
-  min-width: 150px;
+  min-width: 108px;
   text-align: center;
 }
 
@@ -943,14 +953,6 @@ body {
   font-size: 9px;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-}
-
-#controls.wheel-pinned #wheels-panel {
-  position: sticky;
-  top: var(--wheel-controls-sticky-offset, 0px);
-  z-index: 7;
-  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
-  border-bottom: 1px solid var(--border);
 }
 
 #wheels-row.wheels-compare-swap {
@@ -999,12 +1001,12 @@ body {
 
 #wheels-row.wheels-compare-inside #wheel-container {
   z-index: 1;
-  width: clamp(112px, 34vw, 142px);
+  width: clamp(164px, 52vw, 214px);
 }
 
 #wheels-row.wheels-compare-inside #rendered-wheel-container {
   z-index: 3;
-  width: clamp(112px, 34vw, 142px);
+  width: clamp(106px, 30vw, 132px);
 }
 
 #wheels-row.wheels-compare-inside #wheel-canvas {
@@ -1014,7 +1016,7 @@ body {
 
 #wheels-row.wheels-compare-inside #rendered-wheel-canvas {
   opacity: 1;
-  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 1px 5px rgba(0, 0, 0, 0.42));
 }
 
 #history-panel,
@@ -1906,6 +1908,9 @@ body {
 }
 
 .picker-coord-readout {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 14px;
   margin: 2px 0 8px;
   font-family: var(--text-mono);
   font-size: 9.5px;
@@ -2161,6 +2166,7 @@ body {
     position: fixed;
     left: var(--mobile-shell-left);
     right: var(--mobile-shell-right);
+    top: auto !important;
     bottom: calc(var(--mobile-overlay-bottom) + var(--isolated-overlay-extra-bottom, 68px));
     z-index: 38;
     margin: 0;
@@ -2324,7 +2330,9 @@ body {
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-mapping #mapping-panel .picker-coord-readout {
-    margin: 4px 0 6px;
+    margin: 0 0 8px;
+    min-height: 13px;
+    padding-right: 2px;
     font-size: 9px;
     letter-spacing: 0.1px;
     color: rgba(200, 208, 224, 0.72);
@@ -2612,28 +2620,68 @@ body {
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview {
+    --wheels-mini-shell-width: 112px;
+    --wheels-mini-shell-height: 112px;
+    --wheels-mini-canvas-size: 46px;
+    --wheels-mini-inside-edit-size: 72px;
+    --wheels-mini-inside-result-size: 48px;
+    --wheels-mini-right-anchor: calc(58px + env(safe-area-inset-right, 0px));
     display: block !important;
     position: fixed;
-    right: calc(58px + env(safe-area-inset-right, 0px));
-    bottom: calc(var(--mobile-overlay-bottom) + 10px);
+    right: var(--wheels-mini-right-anchor);
+    bottom: calc(var(--mobile-overlay-bottom) + var(--wheels-mini-preview-offset, 10px));
     left: auto;
-    width: 120px;
+    width: var(--wheels-mini-shell-width);
     margin: 0;
-    padding: 6px;
+    padding: 6px 6px 8px;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
+    border-radius: 10px;
     background: linear-gradient(180deg, rgba(16, 19, 25, 0.96), rgba(9, 11, 15, 0.94));
     backdrop-filter: blur(12px) saturate(126%);
-    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.42);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.38);
     pointer-events: auto;
     touch-action: none;
     cursor: grab;
-    transform: translate(var(--wheels-mini-x, 0px), var(--wheels-mini-y, 0px));
+    transform: translate(
+      clamp(
+        calc(var(--wheels-mini-right-anchor) + var(--wheels-mini-shell-width) + 6px - 100vw),
+        var(--wheels-mini-x, 0px),
+        calc(var(--wheels-mini-right-anchor) - 6px)
+      ),
+      clamp(
+        calc(var(--mobile-overlay-bottom) + var(--wheels-mini-preview-offset, 10px) + var(--wheels-mini-shell-height) + var(--header-height, 52px) + 4px - 100dvh),
+        var(--wheels-mini-y, 0px),
+        calc(var(--mobile-overlay-bottom) + var(--wheels-mini-preview-offset, 10px) - 6px)
+      )
+    );
     z-index: 35;
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview.is-dragging {
     cursor: grabbing;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview .wheels-mini-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin: 0 0 6px;
+    padding: 4px 0 2px;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview.is-dragging .wheels-mini-drag-handle {
+    cursor: grabbing;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview .wheels-mini-drag-handle .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.66);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 4px rgba(0, 0, 0, 0.28);
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview .panel-header {
@@ -2642,7 +2690,7 @@ body {
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview #wheels-row {
     display: flex !important;
-    min-height: 92px;
+    min-height: 78px;
     padding: 0;
     justify-content: center;
     gap: 4px;
@@ -2658,14 +2706,19 @@ body {
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview #wheel-container,
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview #rendered-wheel-container {
-    width: 52px;
-    max-width: 52px;
+    width: var(--wheels-mini-canvas-size);
+    max-width: var(--wheels-mini-canvas-size);
     padding: 0;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview :is(#wheel-canvas, #rendered-wheel-canvas) {
+    pointer-events: none;
+    touch-action: none;
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview #wheels-row.wheels-compare-inside {
     position: relative;
-    min-height: 92px;
+    min-height: 78px;
     justify-content: center;
     align-items: center;
   }
@@ -2692,17 +2745,19 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 52px;
-    max-width: 52px;
     padding: 0;
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview #wheels-row.wheels-compare-inside #wheel-container {
     z-index: 1;
+    width: var(--wheels-mini-inside-edit-size);
+    max-width: var(--wheels-mini-inside-edit-size);
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode:not(.module-wheels) #wheels-panel.wheels-mini-preview #wheels-row.wheels-compare-inside #rendered-wheel-container {
     z-index: 3;
+    width: var(--wheels-mini-inside-result-size);
+    max-width: var(--wheels-mini-inside-result-size);
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-mapping #mapping-panel>:is(.mapping-control-rail, .mapping-mode-rail),
@@ -2745,7 +2800,11 @@ body {
   }
 
   #wheel-compare-btn {
-    min-width: 116px;
+    min-width: 90px;
+  }
+
+  #wheel-mini-visibility-btn {
+    min-width: 88px;
   }
 
   .tool-btn {
@@ -2805,15 +2864,15 @@ body {
   }
 
   #wheels-row.wheels-compare-inside {
-    min-height: 168px;
+    min-height: 192px;
   }
 
   #wheels-row.wheels-compare-inside #wheel-container {
-    width: clamp(88px, 27vw, 110px);
+    width: clamp(146px, 46vw, 184px);
   }
 
   #wheels-row.wheels-compare-inside #rendered-wheel-container {
-    width: clamp(88px, 27vw, 110px);
+    width: clamp(94px, 28vw, 116px);
   }
 
   .mobile-module-bar {
@@ -3218,15 +3277,29 @@ body {
   }
 
   /* Auto overlay for heavy controls when user has not manually resized split */
-  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-calibration #panels,
-  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-mapping #panels,
-  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-toning #panels,
-  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-history #history-panel {
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls:is(.module-wheels, .module-calibration, .module-mapping, .module-toning) #control-module-shell,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:is(.module-wheels, .module-calibration, .module-mapping, .module-toning) #control-module-shell,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-history #history-panel,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-history #history-panel {
     position: fixed;
     left: var(--mobile-shell-left);
     right: var(--mobile-shell-right);
     bottom: var(--mobile-overlay-bottom);
     z-index: 34;
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls:is(.module-wheels, .module-calibration, .module-mapping, .module-toning) #control-module-shell,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:is(.module-wheels, .module-calibration, .module-mapping, .module-toning) #control-module-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: min(56dvh, 440px);
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-history #history-panel,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-history #history-panel {
     max-height: min(46dvh, 360px);
     overflow-y: auto;
     background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
@@ -3237,29 +3310,29 @@ body {
     padding: 8px;
   }
 
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-calibration #panels,
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-mapping #panels,
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-toning #panels {
-    position: fixed;
-    left: var(--mobile-shell-left);
-    right: var(--mobile-shell-right);
-    bottom: var(--mobile-overlay-bottom);
-    z-index: 34;
-    max-height: min(46dvh, 360px);
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls:is(.module-wheels, .module-calibration, .module-mapping, .module-toning) #control-module-shell>#panels,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:is(.module-wheels, .module-calibration, .module-mapping, .module-toning) #control-module-shell>#panels {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
     overflow-y: auto;
-    background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius-lg);
-    backdrop-filter: blur(12px) saturate(125%);
-    box-shadow: var(--shadow-lg);
-    padding: 8px;
+    margin: 0;
     pointer-events: auto;
   }
 
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-mapping #panels,
-  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-mapping #panels {
-    bottom: var(--mobile-overlay-bottom);
-    max-height: min(36dvh, 300px);
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-mapping #control-module-shell,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-mapping #control-module-shell {
+    max-height: min(58dvh, 460px);
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-toning #control-module-shell,
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-toning #control-module-shell {
+    max-height: min(60dvh, 480px);
   }
 
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-calibration #panels>.panel:not(.wheels-mini-preview),
@@ -3300,6 +3373,20 @@ body {
   :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-mapping #mapping-mode-tabs.mapping-mode-rail,
   :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-mapping #mapping-mode-tabs.mapping-mode-rail {
     margin-top: 0;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode:is(.module-calibration, .module-mapping, .module-toning) :is(#isolated-cal-sliders, #isolated-controls-sliders),
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls:is(.module-calibration, .module-mapping, .module-toning) :is(#isolated-cal-sliders, #isolated-controls-sliders) {
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto !important;
+    bottom: auto;
+    z-index: 1;
+    flex: 0 0 auto;
+    order: -1;
+    width: auto;
+    margin: 0;
   }
 
   :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-calibration #panels>.panel:not(.wheels-mini-preview),
@@ -3344,7 +3431,7 @@ body {
     margin-top: 4px;
   }
 
-  :root[data-ui-layout='image-priority'] #app:has(#controls.image-priority-mode:not(.module-wheels)) #preview-controls-divider {
+  :root[data-ui-layout='image-priority'] #app:has(#controls.image-priority-mode.module-open) #preview-controls-divider {
     display: none !important;
   }
 
@@ -3385,32 +3472,32 @@ body {
     box-shadow: 0 18px 38px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(45, 133, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-wheels #wheels-panel {
-    position: fixed;
-    left: var(--mobile-shell-left);
-    right: var(--mobile-shell-right);
-    bottom: var(--mobile-overlay-bottom);
-    z-index: 34;
-    background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    backdrop-filter: blur(12px) saturate(130%);
-    box-shadow: var(--shadow-lg);
+  :root[data-ui-layout='image-priority'] #app.auto-overlay-mode #controls.module-wheels #wheels-panel,
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-wheels #wheels-panel {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 1;
+    margin: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    backdrop-filter: none;
+    box-shadow: none;
+    padding: 5px 4px;
+    pointer-events: auto;
   }
 
-  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-wheels #wheels-panel {
-    position: fixed;
-    left: var(--mobile-shell-left);
-    right: var(--mobile-shell-right);
-    bottom: var(--mobile-overlay-bottom);
-    z-index: 34;
-    background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius-lg);
-    backdrop-filter: blur(12px) saturate(125%);
-    box-shadow: var(--shadow-lg);
-    padding: 8px;
-    pointer-events: auto;
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-wheels #wheels-panel .panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  :root[data-ui-layout='image-priority'] #controls.image-priority-mode.module-wheels #wheels-panel .module-collapse-btn {
+    display: inline-flex !important;
   }
 
   :root[data-ui-layout='image-priority'] #controls.module-wheels #wheels-panel .panel-header {

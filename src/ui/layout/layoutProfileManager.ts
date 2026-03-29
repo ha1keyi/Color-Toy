@@ -194,7 +194,6 @@ export function setupLayoutProfileManager(deps: LayoutProfileManagerDeps): void 
       mobileModuleSelection: deps.getMobileModuleSelection(),
       controlsPriorityPreviewRatio: state.ui.controlsPriorityPreviewRatio,
       imagePriorityPreviewRatio: state.ui.imagePriorityPreviewRatio,
-      wheelPinned: state.ui.wheelPinned,
       splitView: state.ui.splitView,
       splitPosition: state.ui.splitPosition,
       collapsedModules: readCollapsedModules(),
@@ -215,7 +214,6 @@ export function setupLayoutProfileManager(deps: LayoutProfileManagerDeps): void 
     deps.setUiPatch({
       controlsPriorityPreviewRatio: profile.controlsPriorityPreviewRatio,
       imagePriorityPreviewRatio: profile.imagePriorityPreviewRatio,
-      wheelPinned: profile.wheelPinned,
       splitView: profile.splitView,
       splitPosition: profile.splitPosition,
     });

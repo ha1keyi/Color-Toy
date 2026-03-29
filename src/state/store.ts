@@ -32,7 +32,6 @@ interface HistoryStateSnapshot {
     | 'colorPickerCoord'
     | 'importedIccProfileName'
     | 'importedIccSource'
-    | 'wheelPinned'
     | 'wheelCollapsed'
     | 'controlsPriorityPreviewRatio'
     | 'imagePriorityPreviewRatio'
@@ -97,7 +96,6 @@ function cloneStateSnapshot(state: AppState): HistoryStateSnapshot {
         : null,
       importedIccProfileName: state.ui.importedIccProfileName,
       importedIccSource: state.ui.importedIccSource,
-      wheelPinned: state.ui.wheelPinned,
       wheelCollapsed: state.ui.wheelCollapsed,
       controlsPriorityPreviewRatio: state.ui.controlsPriorityPreviewRatio,
       imagePriorityPreviewRatio: state.ui.imagePriorityPreviewRatio,
