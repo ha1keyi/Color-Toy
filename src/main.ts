@@ -71,6 +71,31 @@ function applyMiniWheelPreviewOffsets(x: number, y: number): void {
   root.style.setProperty('--wheels-mini-y', `${y}px`);
 }
 
+function syncMiniWheelPreviewHost(): void {
+  const controls = document.getElementById('controls') as HTMLElement | null;
+  const panels = document.getElementById('panels') as HTMLElement | null;
+  const host = document.getElementById('wheels-mini-preview-host') as HTMLElement | null;
+  const wheelsPanel = document.getElementById('wheels-panel') as HTMLElement | null;
+  if (!controls || !panels || !host || !wheelsPanel) {
+    return;
+  }
+
+  const shouldFloat = controls.classList.contains('image-priority-mode')
+    && !controls.classList.contains('module-wheels')
+    && wheelsPanel.classList.contains('wheels-mini-preview');
+
+  if (shouldFloat) {
+    if (wheelsPanel.parentElement !== host) {
+      host.appendChild(wheelsPanel);
+    }
+    return;
+  }
+
+  if (wheelsPanel.parentElement !== panels) {
+    panels.insertBefore(wheelsPanel, panels.firstElementChild);
+  }
+}
+
 function clampMiniWheelPreviewIntoViewport(): { x: number; y: number } | null {
   const panel = document.getElementById('wheels-panel') as HTMLElement | null;
   if (!panel || !isMobileCompactViewport() || !panel.classList.contains('wheels-mini-preview')) {
@@ -1536,7 +1561,6 @@ function setupMiniWheelsDrag(): void {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     const target = event.target as HTMLElement | null;
-    if (!target?.closest('.wheels-mini-drag-handle')) return;
     if (target?.closest('button,input,select,textarea,a')) return;
 
     dragging = true;
@@ -1611,13 +1635,15 @@ function syncMiniWheelPreviewOffset(state: AppState): void {
   }
 
   const candidates = [
-    'panels',
-    'history-panel',
-    'bottom-bar',
-    'color-management-panel',
-    'isolated-cal-sliders',
-    'isolated-controls-sliders',
+    _mobileModuleSelection === 'history' ? 'history-panel' : null,
+    _mobileModuleSelection === 'presets' ? 'bottom-bar' : null,
+    _mobileModuleSelection === 'color-management' ? 'color-management-panel' : null,
+    _mobileModuleSelection === 'calibration' ? 'isolated-cal-sliders' : null,
+    _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning'
+      ? 'isolated-controls-sliders'
+      : null,
   ]
+    .filter((id): id is string => !!id)
     .map((id) => document.getElementById(id) as HTMLElement | null)
     .filter((element): element is HTMLElement => !!element);
 
@@ -3162,6 +3188,7 @@ function updatePanelUI(state: AppState): void {
   trackWheelDisplayLayer(state);
   const wheelsPanel = document.getElementById('wheels-panel') as HTMLElement | null;
   const panels = document.getElementById('panels') as HTMLElement | null;
+  const previousWheelParent = wheelsPanel?.parentElement?.id ?? '';
   const previousWheelDisplay = wheelsPanel?.style.display ?? '';
   const previousMiniPreview = wheelsPanel?.classList.contains('wheels-mini-preview') ?? false;
   const previousPanelsDisplay = panels?.style.display ?? '';
@@ -3198,6 +3225,8 @@ function updatePanelUI(state: AppState): void {
     mappingPanel.setAttribute('data-mapping-control', _mobileMappingControl);
   }
   if (toningPanel) toningPanel.setAttribute('data-toning-control', _mobileToningControl);
+
+  syncMiniWheelPreviewHost();
 
   applyWheelLayoutModeUI(state);
   syncIsolatedOverlayBottomOffset(state);
@@ -3264,9 +3293,11 @@ function updatePanelUI(state: AppState): void {
 
   const nextWheelDisplay = wheelsPanel?.style.display ?? '';
   const nextMiniPreview = wheelsPanel?.classList.contains('wheels-mini-preview') ?? false;
+  const nextWheelParent = wheelsPanel?.parentElement?.id ?? '';
   const nextPanelsDisplay = panels?.style.display ?? '';
   if (
-    previousWheelDisplay !== nextWheelDisplay
+    previousWheelParent !== nextWheelParent
+    || previousWheelDisplay !== nextWheelDisplay
     || previousMiniPreview !== nextMiniPreview
     || previousPanelsDisplay !== nextPanelsDisplay
   ) {

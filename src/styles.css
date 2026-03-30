@@ -259,6 +259,12 @@ body {
   min-height: 0;
 }
 
+#wheels-mini-preview-host {
+  position: relative;
+  z-index: 41;
+  pointer-events: none;
+}
+
 #isolated-cal-sliders,
 #isolated-controls-sliders {
   position: absolute;
