@@ -160,6 +160,13 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   if (splitBtn) {
     splitBtn.classList.toggle('active', state.ui.splitView);
     splitBtn.setAttribute('aria-pressed', String(state.ui.splitView));
+    splitBtn.toggleAttribute('disabled', !state.imageLoaded);
+    splitBtn.setAttribute(
+      'aria-label',
+      state.imageLoaded
+        ? (state.ui.splitView ? 'Disable split compare' : 'Enable split compare')
+        : 'Load an image to enable split compare',
+    );
   }
 
   const layoutToggleBtn = document.getElementById('layout-toggle-btn') as HTMLButtonElement | null;
@@ -169,6 +176,11 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     layoutToggleBtn.setAttribute('aria-pressed', String(layoutMode === 'image-priority'));
     const label = layoutToggleBtn.querySelector('span') || layoutToggleBtn;
     label.textContent = layoutMode === 'image-priority' ? 'Layout: Image' : 'Layout: Controls';
+    const layoutAction = layoutMode === 'image-priority'
+      ? 'Switch to controls priority layout'
+      : 'Switch to image priority layout';
+    layoutToggleBtn.title = layoutAction;
+    layoutToggleBtn.setAttribute('aria-label', layoutAction);
   }
 
   const holdCompareBtn = document.getElementById('hold-compare-btn') as HTMLButtonElement | null;
@@ -176,6 +188,12 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
     holdCompareBtn.classList.toggle('active', state.ui.holdCompareActive);
     holdCompareBtn.setAttribute('aria-pressed', String(state.ui.holdCompareActive));
     holdCompareBtn.disabled = !state.imageLoaded;
+    holdCompareBtn.setAttribute(
+      'aria-label',
+      state.imageLoaded
+        ? 'Hold to compare with the original image'
+        : 'Load an image to enable hold compare',
+    );
   }
 
   const wheelMiniVisibilityBtn = document.getElementById('wheel-mini-visibility-btn') as HTMLButtonElement | null;
@@ -193,6 +211,7 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
       : deps.wheelMiniMode === 'split'
         ? 'Minimized wheels use left/right mode'
         : 'Minimized wheels are hidden outside the wheels module';
+    wheelMiniVisibilityBtn.setAttribute('aria-label', wheelMiniVisibilityBtn.title);
   }
 
   const mappingPickerBtn = document.getElementById('add-mapping-picker-btn') as HTMLButtonElement | null;
@@ -211,7 +230,12 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   const gamutToggle = document.getElementById('gamut-compression-toggle') as HTMLButtonElement | null;
   if (gamutToggle) {
     gamutToggle.classList.toggle('active', state.ui.gamutCompressionEnabled);
+    gamutToggle.setAttribute('aria-pressed', String(state.ui.gamutCompressionEnabled));
     gamutToggle.textContent = state.ui.gamutCompressionEnabled ? 'On' : 'Off';
+    gamutToggle.setAttribute(
+      'aria-label',
+      state.ui.gamutCompressionEnabled ? 'Disable soft gamut compression' : 'Enable soft gamut compression',
+    );
   }
 
   const iccReadout = document.getElementById('icc-profile-readout');

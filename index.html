@@ -13,6 +13,47 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <title>Color Toy</title>
   <script type="module" src="/src/main.ts"></script>
+  <script>
+    (() => {
+      const devEntry = document.querySelector('script[type="module"][src="/src/main.ts"]');
+      if (!devEntry || !('serviceWorker' in navigator)) {
+        return;
+      }
+
+      const cleanupKey = 'colorToy.devServiceWorkerCleanup';
+
+      window.addEventListener('load', async () => {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          const hadRegistrations = registrations.length > 0 || !!navigator.serviceWorker.controller;
+
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+
+          if ('caches' in window) {
+            const cacheKeys = await caches.keys();
+            await Promise.all(
+              cacheKeys
+                .filter((key) => key.startsWith('color-toy'))
+                .map((key) => caches.delete(key))
+            );
+          }
+
+          if (hadRegistrations) {
+            const didReload = window.sessionStorage.getItem(cleanupKey) === '1';
+            if (!didReload) {
+              window.sessionStorage.setItem(cleanupKey, '1');
+              window.location.reload();
+              return;
+            }
+          }
+
+          window.sessionStorage.removeItem(cleanupKey);
+        } catch (error) {
+          console.warn('Development service worker bootstrap cleanup failed:', error);
+        }
+      });
+    })();
+  </script>
   <link rel="stylesheet" href="/src/styles.css">
 </head>
 
@@ -43,32 +84,23 @@
           </svg>
           <span class="theme-toggle-label">Dark</span>
         </button>
-        <button id="layout-studio-entry-btn" class="icon-btn" type="button" title="Layout Studio (Hidden Feature)"
-          aria-label="Layout Studio hidden feature">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
-          </svg>
-        </button>
         <button id="export-btn" class="primary-btn">Export</button>
       </div>
     </header>
 
     <div id="top-control-bar" aria-label="Top Controls">
       <div class="top-global-actions">
-        <button id="hold-compare-btn" class="tool-btn" title="Hold to compare with original image">
+        <button id="hold-compare-btn" class="tool-btn" title="Hold to compare with original image" aria-pressed="false">
           <span>Hold Compare</span>
         </button>
-        <button id="split-btn" class="tool-btn" title="Before/After Compare">
+        <button id="split-btn" class="tool-btn" title="Before/After Compare" aria-pressed="false">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <line x1="12" y1="3" x2="12" y2="21" />
           </svg>
           <span>Compare</span>
         </button>
-        <button id="layout-toggle-btn" class="tool-btn" type="button" title="Toggle layout mode">
+        <button id="layout-toggle-btn" class="tool-btn" type="button" title="Toggle layout mode" aria-pressed="false">
           <span>Layout: Controls</span>
         </button>
         <button id="reset-all-btn" class="tool-btn" title="Reset All">
@@ -89,14 +121,14 @@
 
     <!-- Preview Area -->
     <div id="preview-container">
-      <button id="wheels-dock-btn" class="wheels-dock-btn" type="button" aria-label="Toggle Wheels"
+      <button id="wheels-dock-btn" class="wheels-dock-btn" type="button" aria-label="Toggle Wheels" aria-pressed="false"
         title="Toggle Wheels">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="8"></circle>
           <circle cx="12" cy="12" r="3"></circle>
         </svg>
       </button>
-      <div id="drop-zone">
+      <div id="drop-zone" tabindex="0" role="button" aria-label="Drop image here or click to upload">
         <div class="drop-content">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
             opacity="0.4">
@@ -129,14 +161,17 @@
     <!-- Controls Sidebar -->
     <div id="controls">
       <!-- Layer Tabs: Calibration (1), Hue Map (2), Toning (3) -->
-      <div id="layer-tabs">
-        <button class="layer-tab active" data-layer="calibration">
+      <div id="layer-tabs" role="tablist" aria-label="Adjustment Layers">
+        <button id="layer-tab-calibration" class="layer-tab active" data-layer="calibration" type="button" role="tab"
+          aria-selected="true" aria-controls="calibration-panel" tabindex="0">
           <span class="tab-num">1</span>Calibration
         </button>
-        <button class="layer-tab" data-layer="mapping">
+        <button id="layer-tab-mapping" class="layer-tab" data-layer="mapping" type="button" role="tab"
+          aria-selected="false" aria-controls="mapping-panel" tabindex="-1">
           <span class="tab-num">2</span>Hue Map
         </button>
-        <button class="layer-tab" data-layer="toning">
+        <button id="layer-tab-toning" class="layer-tab" data-layer="toning" type="button" role="tab"
+          aria-selected="false" aria-controls="toning-panel" tabindex="-1">
           <span class="tab-num">3</span>Toning
         </button>
       </div>
@@ -144,332 +179,333 @@
       <!-- Dynamic Panels -->
       <div id="control-module-shell">
         <div id="panels">
-        <!-- Wheels Panel -->
-        <div id="wheels-panel" class="panel">
-          <div class="panel-header">
-            <h3 class="panel-title">Wheels</h3>
-            <div class="panel-header-actions">
-              <button id="wheel-compare-btn" class="small-btn" type="button">Panel: L/R</button>
-              <button id="wheel-mini-visibility-btn" class="small-btn" type="button">Mini: In/Out</button>
-              <button id="wheels-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="wheels-panel" aria-controls="wheels-row" title="Collapse wheels">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="wheels-mini-drag-handle" aria-hidden="true">
-            <i class="dot"></i>
-            <i class="dot"></i>
-            <i class="dot"></i>
-          </div>
-          <div id="wheels-row">
-            <div class="wheel-col">
-              <div class="wheel-label">Edit</div>
-              <div id="wheel-container">
-                <canvas id="wheel-canvas"></canvas>
+          <!-- Wheels Panel -->
+          <div id="wheels-panel" class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Wheels</h3>
+              <div class="panel-header-actions">
+                <button id="wheel-compare-btn" class="small-btn" type="button" aria-label="Switch wheels panel mode">Panel: L/R</button>
+                <button id="wheel-mini-visibility-btn" class="small-btn" type="button" aria-pressed="true"
+                  aria-label="Switch minimized wheels mode">Mini: In/Out</button>
+                <button id="wheels-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
+                  data-collapse-target="wheels-panel" aria-controls="wheels-row" title="Collapse wheels">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                  </svg>
+                </button>
               </div>
             </div>
-            <div class="wheel-col">
-              <div class="wheel-label">Result</div>
-              <div id="rendered-wheel-container">
-                <canvas id="rendered-wheel-canvas"></canvas>
+            <div class="wheels-mini-drag-handle" aria-hidden="true">
+              <i class="dot"></i>
+              <i class="dot"></i>
+              <i class="dot"></i>
+            </div>
+            <div id="wheels-row">
+              <div class="wheel-col">
+                <div class="wheel-label">Edit</div>
+                <div id="wheel-container">
+                  <canvas id="wheel-canvas"></canvas>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Calibration Panel -->
-        <div id="calibration-panel" class="panel" style="display:none">
-          <div class="panel-header">
-            <h3 class="panel-title">Calibration</h3>
-            <div class="panel-header-actions">
-              <button class="reset-module-btn" data-module="calibration" title="Reset Calibration"
-                aria-label="Reset Calibration">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 4v6h6" />
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                </svg>
-              </button>
-              <button id="calibration-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="calibration-panel" aria-controls="calibration-panel" title="Collapse calibration">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div id="calibration-primary-tabs" class="calibration-primary-rail calibration-tabs"
-            aria-label="Calibration Primary Selector">
-            <button class="submodule-tab" type="button" data-cal-primary="xy">XY</button>
-            <button class="submodule-tab active" type="button" data-cal-primary="red">R</button>
-            <button class="submodule-tab" type="button" data-cal-primary="green">G</button>
-            <button class="submodule-tab" type="button" data-cal-primary="blue">B</button>
-          </div>
-
-        </div>
-
-        <!-- XY Chromaticity Panel -->
-        <div id="xy-panel" class="panel" style="display:none">
-          <div class="panel-header">
-            <h3 class="panel-title">xy Chromaticity</h3>
-            <div class="panel-header-actions">
-              <button id="xy-panel-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="xy-panel" aria-controls="xy-panel" title="Collapse xy chromaticity">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                </svg>
-              </button>
+              <div class="wheel-col">
+                <div class="wheel-label">Result</div>
+                <div id="rendered-wheel-container">
+                  <canvas id="rendered-wheel-canvas"></canvas>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div id="xy-diagram-container">
-            <canvas id="xy-diagram-canvas" width="300" height="300"></canvas>
+          <!-- Calibration Panel -->
+          <div id="calibration-panel" class="panel" style="display:none">
+            <div class="panel-header">
+              <h3 class="panel-title">Calibration</h3>
+              <div class="panel-header-actions">
+                <button class="reset-module-btn" data-module="calibration" title="Reset Calibration"
+                  aria-label="Reset Calibration">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 4v6h6" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+                <button id="calibration-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
+                  data-collapse-target="calibration-panel" aria-controls="calibration-panel"
+                  title="Collapse calibration">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div id="calibration-primary-tabs" class="calibration-primary-rail calibration-tabs"
+              aria-label="Calibration Primary Selector">
+              <button class="submodule-tab" type="button" data-cal-primary="xy">XY</button>
+              <button class="submodule-tab active" type="button" data-cal-primary="red">R</button>
+              <button class="submodule-tab" type="button" data-cal-primary="green">G</button>
+              <button class="submodule-tab" type="button" data-cal-primary="blue">B</button>
+            </div>
+
           </div>
 
-          <div class="xy-panel-content">
-            <div class="xy-row">
-              <span class="primary-label red">R</span>
-              <div class="xy-input-group">
-                <label>x</label>
-                <input type="number" id="red-x-input" step="0.001" min="0.01" max="0.99" value="0.6400"
-                  class="xy-input">
-              </div>
-              <div class="xy-input-group">
-                <label>y</label>
-                <input type="number" id="red-y-input" step="0.001" min="0.01" max="0.99" value="0.3300"
-                  class="xy-input">
-              </div>
-            </div>
-            <div class="xy-row">
-              <span class="primary-label green">G</span>
-              <div class="xy-input-group">
-                <label>x</label>
-                <input type="number" id="green-x-input" step="0.001" min="0.01" max="0.99" value="0.3000"
-                  class="xy-input">
-              </div>
-              <div class="xy-input-group">
-                <label>y</label>
-                <input type="number" id="green-y-input" step="0.001" min="0.01" max="0.99" value="0.6000"
-                  class="xy-input">
+          <!-- XY Chromaticity Panel -->
+          <div id="xy-panel" class="panel" style="display:none">
+            <div class="panel-header">
+              <h3 class="panel-title">xy Chromaticity</h3>
+              <div class="panel-header-actions">
+                <button id="xy-panel-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
+                  data-collapse-target="xy-panel" aria-controls="xy-panel" title="Collapse xy chromaticity">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                  </svg>
+                </button>
               </div>
             </div>
-            <div class="xy-row">
-              <span class="primary-label blue">B</span>
-              <div class="xy-input-group">
-                <label>x</label>
-                <input type="number" id="blue-x-input" step="0.001" min="0.01" max="0.99" value="0.1500"
-                  class="xy-input">
-              </div>
-              <div class="xy-input-group">
-                <label>y</label>
-                <input type="number" id="blue-y-input" step="0.001" min="0.01" max="0.99" value="0.0600"
-                  class="xy-input">
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- Hue Mapping Panel -->
-        <div id="mapping-panel" class="panel" style="display:none">
-          <div class="panel-header">
-            <h3 class="panel-title">Hue Mapping</h3>
-            <div class="panel-header-actions">
-              <button class="reset-module-btn" data-module="mapping" title="Reset Hue Mapping"
-                aria-label="Reset Hue Mapping">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 4v6h6" />
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                </svg>
-              </button>
-              <button id="mapping-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="mapping-panel" aria-controls="mapping-panel" title="Collapse hue mapping">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                </svg>
-              </button>
+            <div id="xy-diagram-container">
+              <canvas id="xy-diagram-canvas" width="300" height="300"></canvas>
             </div>
-          </div>
-          <div id="picker-coord-readout" class="picker-coord-readout mapping-picker-group">Pixel: -, -</div>
-          <div id="mapping-list" class="mapping-list mapping-point-group"></div>
-          <div class="mapping-actions mapping-point-group">
-            <button id="add-mapping-btn" class="small-btn">+ Add Point</button>
-            <button id="add-mapping-picker-btn" class="small-btn" title="Pick color from image to add point">Pick from
-              Image</button>
-            <button id="delete-mapping-btn" class="small-btn danger">Delete</button>
-          </div>
-          <div id="mapping-control-tabs" class="mapping-control-rail mapping-control-tabs"
-            aria-label="Hue Map Point Parameter Selector">
-            <button class="submodule-tab active" type="button" data-mapping-control="picker">Picker</button>
-            <button class="submodule-tab" type="button" data-mapping-control="src">Source</button>
-            <button class="submodule-tab" type="button" data-mapping-control="dst">Target</button>
-            <button class="submodule-tab" type="button" data-mapping-control="range">Range</button>
-            <button class="submodule-tab" type="button" data-mapping-control="strength">Strength</button>
-          </div>
-          <div id="mapping-mode-tabs" class="mapping-mode-rail"
-            aria-label="Hue Map Mode Selector">
-            <button class="submodule-tab active" type="button" data-mapping-mode="global">Global</button>
-            <button class="submodule-tab" type="button" data-mapping-mode="point">Point</button>
-          </div>
-        </div>
 
-        <!-- Toning Panel -->
-        <div id="toning-panel" class="panel">
-          <div class="panel-header">
-            <h3 class="panel-title">Toning</h3>
-            <div class="panel-header-actions">
-              <button class="reset-module-btn" data-module="toning" title="Reset Toning" aria-label="Reset Toning">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 4v6h6" />
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                </svg>
-              </button>
-              <button id="toning-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
-                data-collapse-target="toning-panel" aria-controls="toning-panel" title="Collapse toning">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                </svg>
-              </button>
+            <div class="xy-panel-content">
+              <div class="xy-row">
+                <span class="primary-label red">R</span>
+                <div class="xy-input-group">
+                  <label>x</label>
+                  <input type="number" id="red-x-input" step="0.001" min="0.01" max="0.99" value="0.6400"
+                    class="xy-input">
+                </div>
+                <div class="xy-input-group">
+                  <label>y</label>
+                  <input type="number" id="red-y-input" step="0.001" min="0.01" max="0.99" value="0.3300"
+                    class="xy-input">
+                </div>
+              </div>
+              <div class="xy-row">
+                <span class="primary-label green">G</span>
+                <div class="xy-input-group">
+                  <label>x</label>
+                  <input type="number" id="green-x-input" step="0.001" min="0.01" max="0.99" value="0.3000"
+                    class="xy-input">
+                </div>
+                <div class="xy-input-group">
+                  <label>y</label>
+                  <input type="number" id="green-y-input" step="0.001" min="0.01" max="0.99" value="0.6000"
+                    class="xy-input">
+                </div>
+              </div>
+              <div class="xy-row">
+                <span class="primary-label blue">B</span>
+                <div class="xy-input-group">
+                  <label>x</label>
+                  <input type="number" id="blue-x-input" step="0.001" min="0.01" max="0.99" value="0.1500"
+                    class="xy-input">
+                </div>
+                <div class="xy-input-group">
+                  <label>y</label>
+                  <input type="number" id="blue-y-input" step="0.001" min="0.01" max="0.99" value="0.0600"
+                    class="xy-input">
+                </div>
+              </div>
             </div>
           </div>
-          <div id="toning-control-tabs" class="toning-control-rail toning-tabs" aria-label="Toning Control Selector">
-            <button class="submodule-tab active" type="button" data-toning-control="contrast">Contrast</button>
-            <button class="submodule-tab" type="button" data-toning-control="exposure">Exposure</button>
-            <button class="submodule-tab" type="button" data-toning-control="highlights">Highlights</button>
-            <button class="submodule-tab" type="button" data-toning-control="shadows">Shadows</button>
-            <button class="submodule-tab" type="button" data-toning-control="whites">Whites</button>
-            <button class="submodule-tab" type="button" data-toning-control="blacks">Blacks</button>
-            <button class="submodule-tab" type="button" data-toning-control="curve">Curve</button>
+
+          <!-- Hue Mapping Panel -->
+          <div id="mapping-panel" class="panel" style="display:none">
+            <div class="panel-header">
+              <h3 class="panel-title">Hue Mapping</h3>
+              <div class="panel-header-actions">
+                <button class="reset-module-btn" data-module="mapping" title="Reset Hue Mapping"
+                  aria-label="Reset Hue Mapping">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 4v6h6" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+                <button id="mapping-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
+                  data-collapse-target="mapping-panel" aria-controls="mapping-panel" title="Collapse hue mapping">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div id="picker-coord-readout" class="picker-coord-readout mapping-picker-group">Pixel: -, -</div>
+            <div id="mapping-list" class="mapping-list mapping-point-group"></div>
+            <div class="mapping-actions mapping-point-group">
+              <button id="add-mapping-btn" class="small-btn">+ Add Point</button>
+              <button id="add-mapping-picker-btn" class="small-btn" title="Pick color from image to add point">Pick from
+                Image</button>
+              <button id="delete-mapping-btn" class="small-btn danger">Delete</button>
+            </div>
+            <div id="mapping-control-tabs" class="mapping-control-rail mapping-control-tabs"
+              aria-label="Hue Map Point Parameter Selector">
+              <button class="submodule-tab active" type="button" data-mapping-control="picker">Picker</button>
+              <button class="submodule-tab" type="button" data-mapping-control="src">Source</button>
+              <button class="submodule-tab" type="button" data-mapping-control="dst">Target</button>
+              <button class="submodule-tab" type="button" data-mapping-control="range">Range</button>
+              <button class="submodule-tab" type="button" data-mapping-control="strength">Strength</button>
+            </div>
+            <div id="mapping-mode-tabs" class="mapping-mode-rail" aria-label="Hue Map Mode Selector">
+              <button class="submodule-tab active" type="button" data-mapping-mode="global">Global</button>
+              <button class="submodule-tab" type="button" data-mapping-mode="point">Point</button>
+            </div>
           </div>
-          <!-- Histogram -->
-          <div id="histogram-container">
-            <canvas id="histogram-canvas" width="320" height="60"></canvas>
+
+          <!-- Toning Panel -->
+          <div id="toning-panel" class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Toning</h3>
+              <div class="panel-header-actions">
+                <button class="reset-module-btn" data-module="toning" title="Reset Toning" aria-label="Reset Toning">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 4v6h6" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+                <button id="toning-collapse-btn" class="module-collapse-btn" type="button" aria-expanded="true"
+                  data-collapse-target="toning-panel" aria-controls="toning-panel" title="Collapse toning">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div id="toning-control-tabs" class="toning-control-rail toning-tabs" aria-label="Toning Control Selector">
+              <button class="submodule-tab active" type="button" data-toning-control="contrast">Contrast</button>
+              <button class="submodule-tab" type="button" data-toning-control="exposure">Exposure</button>
+              <button class="submodule-tab" type="button" data-toning-control="highlights">Highlights</button>
+              <button class="submodule-tab" type="button" data-toning-control="shadows">Shadows</button>
+              <button class="submodule-tab" type="button" data-toning-control="whites">Whites</button>
+              <button class="submodule-tab" type="button" data-toning-control="blacks">Blacks</button>
+              <button class="submodule-tab" type="button" data-toning-control="curve">Curve</button>
+            </div>
+            <!-- Histogram -->
+            <div id="histogram-container">
+              <canvas id="histogram-canvas" width="320" height="60"></canvas>
+            </div>
+            <!-- Tone Curve -->
+            <div id="tone-curve-container">
+              <canvas id="tone-curve-canvas" width="256" height="256"></canvas>
+            </div>
+            <div class="tone-curve-controls">
+              <button id="tone-curve-enable-btn" class="small-btn" type="button">Tone Curve: On</button>
+              <button id="tone-curve-bypass-btn" class="small-btn" type="button">A/B: Processed</button>
+            </div>
           </div>
-          <!-- Tone Curve -->
-          <div id="tone-curve-container">
-            <canvas id="tone-curve-canvas" width="256" height="256"></canvas>
-          </div>
-          <div class="tone-curve-controls">
-            <button id="tone-curve-enable-btn" class="small-btn" type="button">Tone Curve: On</button>
-            <button id="tone-curve-bypass-btn" class="small-btn" type="button">A/B: Processed</button>
-          </div>
-        </div>
         </div>
 
         <!-- Isolated slider docks: overlay-capable on desktop, docked under the active panel on mobile -->
         <div id="isolated-cal-sliders" class="isolated-slider-panel" aria-hidden="false">
-        <!-- Red Primary -->
-        <div class="cal-channel" data-cal-primary="red">
-          <span class="cal-label red">R</span>
-          <div class="cal-sliders">
-            <div class="slider-row">
-              <label>Hue</label>
-              <input type="range" id="red-hue-slider" min="-180" max="180" step="0.1" value="0">
-              <input type="number" id="red-hue-slider-val" class="val-input" step="0.1" value="0.0">
-            </div>
-            <div class="slider-row">
-              <label>Saturation</label>
-              <input type="range" id="red-sat-slider" min="-100" max="100" step="1" value="0">
-              <input type="number" id="red-sat-slider-val" class="val-input" step="1" value="0">
-            </div>
-          </div>
-        </div>
-        <!-- Green Primary -->
-        <div class="cal-channel" data-cal-primary="green">
-          <span class="cal-label green">G</span>
-          <div class="cal-sliders">
-            <div class="slider-row">
-              <label>Hue</label>
-              <input type="range" id="green-hue-slider" min="-180" max="180" step="0.1" value="0">
-              <input type="number" id="green-hue-slider-val" class="val-input" step="0.1" value="0.0">
-            </div>
-            <div class="slider-row">
-              <label>Saturation</label>
-              <input type="range" id="green-sat-slider" min="-100" max="100" step="1" value="0">
-              <input type="number" id="green-sat-slider-val" class="val-input" step="1" value="0">
+          <!-- Red Primary -->
+          <div class="cal-channel" data-cal-primary="red">
+            <span class="cal-label red">R</span>
+            <div class="cal-sliders">
+              <div class="slider-row">
+                <label>Hue</label>
+                <input type="range" id="red-hue-slider" min="-180" max="180" step="0.1" value="0">
+                <input type="number" id="red-hue-slider-val" class="val-input" step="0.1" value="0.0">
+              </div>
+              <div class="slider-row">
+                <label>Saturation</label>
+                <input type="range" id="red-sat-slider" min="-100" max="100" step="1" value="0">
+                <input type="number" id="red-sat-slider-val" class="val-input" step="1" value="0">
+              </div>
             </div>
           </div>
-        </div>
-        <!-- Blue Primary -->
-        <div class="cal-channel" data-cal-primary="blue">
-          <span class="cal-label blue">B</span>
-          <div class="cal-sliders">
-            <div class="slider-row">
-              <label>Hue</label>
-              <input type="range" id="blue-hue-slider" min="-180" max="180" step="0.1" value="0">
-              <input type="number" id="blue-hue-slider-val" class="val-input" step="0.1" value="0.0">
-            </div>
-            <div class="slider-row">
-              <label>Saturation</label>
-              <input type="range" id="blue-sat-slider" min="-100" max="100" step="1" value="0">
-              <input type="number" id="blue-sat-slider-val" class="val-input" step="1" value="0">
+          <!-- Green Primary -->
+          <div class="cal-channel" data-cal-primary="green">
+            <span class="cal-label green">G</span>
+            <div class="cal-sliders">
+              <div class="slider-row">
+                <label>Hue</label>
+                <input type="range" id="green-hue-slider" min="-180" max="180" step="0.1" value="0">
+                <input type="number" id="green-hue-slider-val" class="val-input" step="0.1" value="0.0">
+              </div>
+              <div class="slider-row">
+                <label>Saturation</label>
+                <input type="range" id="green-sat-slider" min="-100" max="100" step="1" value="0">
+                <input type="number" id="green-sat-slider-val" class="val-input" step="1" value="0">
+              </div>
             </div>
           </div>
-        </div>
+          <!-- Blue Primary -->
+          <div class="cal-channel" data-cal-primary="blue">
+            <span class="cal-label blue">B</span>
+            <div class="cal-sliders">
+              <div class="slider-row">
+                <label>Hue</label>
+                <input type="range" id="blue-hue-slider" min="-180" max="180" step="0.1" value="0">
+                <input type="number" id="blue-hue-slider-val" class="val-input" step="0.1" value="0.0">
+              </div>
+              <div class="slider-row">
+                <label>Saturation</label>
+                <input type="range" id="blue-sat-slider" min="-100" max="100" step="1" value="0">
+                <input type="number" id="blue-sat-slider-val" class="val-input" step="1" value="0">
+              </div>
+            </div>
+          </div>
         </div>
 
         <div id="isolated-controls-sliders" class="isolated-slider-panel" aria-hidden="false">
-        <!-- Mapping: Picker radius -->
-        <div class="slider-row picker-settings-row mapping-picker-group">
-          <label for="picker-radius-slider">Pick Radius</label>
-          <input type="range" id="picker-radius-slider" min="0" max="6" step="1" value="2">
-          <input type="number" id="picker-radius-slider-val" class="val-input" min="0" max="6" step="1" value="2">
-        </div>
+          <!-- Mapping: Picker radius -->
+          <div class="slider-row picker-settings-row mapping-picker-group">
+            <label for="picker-radius-slider">Pick Radius</label>
+            <input type="range" id="picker-radius-slider" min="0" max="6" step="1" value="2">
+            <input type="number" id="picker-radius-slider-val" class="val-input" min="0" max="6" step="1" value="2">
+          </div>
 
-        <!-- Mapping: Control point sliders -->
-        <div class="slider-row mapping-control-row" data-mapping-control="src">
-          <label>Source</label>
-          <input type="range" id="mapping-src-slider" min="0" max="1" step="0.001" value="0">
-          <input type="number" id="mapping-src-slider-val" class="val-input" step="0.001" value="0.00">
-        </div>
-        <div class="slider-row mapping-control-row" data-mapping-control="dst">
-          <label>Target</label>
-          <input type="range" id="mapping-dst-slider" min="0" max="1" step="0.001" value="0">
-          <input type="number" id="mapping-dst-slider-val" class="val-input" step="0.001" value="0.00">
-        </div>
-        <div class="slider-row mapping-control-row" data-mapping-control="range">
-          <label>Range</label>
-          <input type="range" id="mapping-range-slider" min="0.01" max="0.5" step="0.001" value="0.083">
-          <input type="number" id="mapping-range-slider-val" class="val-input" step="0.001" value="0.08">
-        </div>
-        <div class="slider-row mapping-control-row" data-mapping-control="strength">
-          <label>Strength</label>
-          <input type="range" id="mapping-strength-slider" min="0" max="1" step="0.01" value="1">
-          <input type="number" id="mapping-strength-slider-val" class="val-input" step="0.001" value="1.00">
-        </div>
+          <!-- Mapping: Control point sliders -->
+          <div class="slider-row mapping-control-row" data-mapping-control="src">
+            <label>Source</label>
+            <input type="range" id="mapping-src-slider" min="0" max="1" step="0.001" value="0">
+            <input type="number" id="mapping-src-slider-val" class="val-input" step="0.001" value="0.00">
+          </div>
+          <div class="slider-row mapping-control-row" data-mapping-control="dst">
+            <label>Target</label>
+            <input type="range" id="mapping-dst-slider" min="0" max="1" step="0.001" value="0">
+            <input type="number" id="mapping-dst-slider-val" class="val-input" step="0.001" value="0.00">
+          </div>
+          <div class="slider-row mapping-control-row" data-mapping-control="range">
+            <label>Range</label>
+            <input type="range" id="mapping-range-slider" min="0.01" max="0.5" step="0.001" value="0.083">
+            <input type="number" id="mapping-range-slider-val" class="val-input" step="0.001" value="0.08">
+          </div>
+          <div class="slider-row mapping-control-row" data-mapping-control="strength">
+            <label>Strength</label>
+            <input type="range" id="mapping-strength-slider" min="0" max="1" step="0.01" value="1">
+            <input type="number" id="mapping-strength-slider-val" class="val-input" step="0.001" value="1.00">
+          </div>
 
-        <!-- Toning sliders -->
-        <div class="slider-row toning-slider-row" data-toning-control="exposure">
-          <label>Exposure</label>
-          <input type="range" id="exposure-slider" min="-2" max="2" step="0.01" value="0">
-          <input type="number" id="exposure-slider-val" class="val-input" step="0.01" value="0.00">
-        </div>
-        <div class="slider-row toning-slider-row" data-toning-control="contrast">
-          <label>Contrast</label>
-          <input type="range" id="contrast-slider" min="0.5" max="2" step="0.01" value="1">
-          <input type="number" id="contrast-slider-val" class="val-input" step="0.01" value="1.00">
-        </div>
-        <div class="slider-row toning-slider-row" data-toning-control="highlights">
-          <label>Highlights</label>
-          <input type="range" id="highlights-slider" min="-1" max="1" step="0.01" value="0">
-          <input type="number" id="highlights-slider-val" class="val-input" step="0.01" value="0.00">
-        </div>
-        <div class="slider-row toning-slider-row" data-toning-control="shadows">
-          <label>Shadows</label>
-          <input type="range" id="shadows-slider" min="-1" max="1" step="0.01" value="0">
-          <input type="number" id="shadows-slider-val" class="val-input" step="0.01" value="0.00">
-        </div>
-        <div class="slider-row toning-slider-row" data-toning-control="whites">
-          <label>Whites</label>
-          <input type="range" id="whites-slider" min="-1" max="1" step="0.01" value="0">
-          <input type="number" id="whites-slider-val" class="val-input" step="0.01" value="0.00">
-        </div>
-        <div class="slider-row toning-slider-row" data-toning-control="blacks">
-          <label>Blacks</label>
-          <input type="range" id="blacks-slider" min="-1" max="1" step="0.01" value="0">
-          <input type="number" id="blacks-slider-val" class="val-input" step="0.01" value="0.00">
-        </div>
+          <!-- Toning sliders -->
+          <div class="slider-row toning-slider-row" data-toning-control="exposure">
+            <label>Exposure</label>
+            <input type="range" id="exposure-slider" min="-2" max="2" step="0.01" value="0">
+            <input type="number" id="exposure-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row toning-slider-row" data-toning-control="contrast">
+            <label>Contrast</label>
+            <input type="range" id="contrast-slider" min="0.5" max="2" step="0.01" value="1">
+            <input type="number" id="contrast-slider-val" class="val-input" step="0.01" value="1.00">
+          </div>
+          <div class="slider-row toning-slider-row" data-toning-control="highlights">
+            <label>Highlights</label>
+            <input type="range" id="highlights-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="highlights-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row toning-slider-row" data-toning-control="shadows">
+            <label>Shadows</label>
+            <input type="range" id="shadows-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="shadows-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row toning-slider-row" data-toning-control="whites">
+            <label>Whites</label>
+            <input type="range" id="whites-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="whites-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
+          <div class="slider-row toning-slider-row" data-toning-control="blacks">
+            <label>Blacks</label>
+            <input type="range" id="blacks-slider" min="-1" max="1" step="0.01" value="0">
+            <input type="number" id="blacks-slider-val" class="val-input" step="0.01" value="0.00">
+          </div>
         </div>
       </div>
 
@@ -502,7 +538,7 @@
         </div>
         <div class="color-management-row toggle-row">
           <label for="gamut-compression-toggle">Soft Gamut Compression</label>
-          <button id="gamut-compression-toggle" class="small-btn" type="button">On</button>
+          <button id="gamut-compression-toggle" class="small-btn" type="button" aria-pressed="true">On</button>
         </div>
         <div id="icc-profile-readout" class="icc-profile-readout">ICC: Not detected</div>
       </div>
@@ -510,12 +546,18 @@
     </div>
 
     <nav id="mobile-module-bar" aria-label="Mobile Operations" class="mobile-module-bar">
-      <button class="mobile-module-btn" data-mobile-module="wheels" type="button">Wheels</button>
-      <button class="mobile-module-btn" data-mobile-module="calibration" type="button">Calibration</button>
-      <button class="mobile-module-btn" data-mobile-module="mapping" type="button">Hue Map</button>
-      <button class="mobile-module-btn" data-mobile-module="toning" type="button">Toning</button>
-      <button class="mobile-module-btn" data-mobile-module="history" type="button">History</button>
-      <button class="mobile-module-btn" data-mobile-module="presets" type="button">Presets</button>
+      <button class="mobile-module-btn" data-mobile-module="wheels" type="button" aria-controls="wheels-panel"
+        aria-pressed="false">Wheels</button>
+      <button class="mobile-module-btn" data-mobile-module="calibration" type="button" aria-controls="calibration-panel"
+        aria-pressed="false">Calibration</button>
+      <button class="mobile-module-btn" data-mobile-module="mapping" type="button" aria-controls="mapping-panel"
+        aria-pressed="false">Hue Map</button>
+      <button class="mobile-module-btn" data-mobile-module="toning" type="button" aria-controls="toning-panel"
+        aria-pressed="false">Toning</button>
+      <button class="mobile-module-btn" data-mobile-module="history" type="button" aria-controls="history-panel"
+        aria-pressed="false">History</button>
+      <button class="mobile-module-btn" data-mobile-module="presets" type="button" aria-controls="bottom-bar"
+        aria-pressed="false">Presets</button>
     </nav>
 
     <!-- Bottom Bar -->

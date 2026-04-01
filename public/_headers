@@ -4,6 +4,7 @@
 /sw.js
   Service-Worker-Allowed: /
   Content-Type: text/javascript; charset=utf-8
+  Cache-Control: no-cache
 
 /icons/*
   Content-Type: image/svg+xml
@@ -13,4 +14,3 @@
 
 /screenshots/*
   Content-Type: image/png
-  Content-Type: image/svg+xml

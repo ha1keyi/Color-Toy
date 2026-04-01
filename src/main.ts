@@ -65,6 +65,47 @@ function parsePixelValue(value: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function findHorizontalScrollContainer(element: HTMLElement | null): HTMLElement | null {
+  let current = element?.parentElement ?? null;
+  while (current) {
+    const style = window.getComputedStyle(current);
+    const canScroll = (style.overflowX === 'auto' || style.overflowX === 'scroll')
+      && current.scrollWidth > current.clientWidth + 1;
+    if (canScroll) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function ensureActiveChipVisible(element: Element | null): void {
+  if (!isMobileCompactViewport() || !(element instanceof HTMLElement)) {
+    return;
+  }
+
+  const container = findHorizontalScrollContainer(element);
+  if (!container) {
+    return;
+  }
+
+  const padding = 12;
+  const itemLeft = element.offsetLeft;
+  const itemRight = itemLeft + element.offsetWidth;
+  const viewLeft = container.scrollLeft;
+  const viewRight = viewLeft + container.clientWidth;
+
+  if (itemLeft >= viewLeft + padding && itemRight <= viewRight - padding) {
+    return;
+  }
+
+  const centeredLeft = Math.max(0, itemLeft - Math.max((container.clientWidth - element.offsetWidth) / 2, padding));
+  container.scrollTo({
+    left: centeredLeft,
+    behavior: 'auto',
+  });
+}
+
 function applyMiniWheelPreviewOffsets(x: number, y: number): void {
   const root = document.documentElement;
   root.style.setProperty('--wheels-mini-x', `${x}px`);
@@ -190,6 +231,7 @@ let wheelRenderPending = false;
 let histogramRenderPending = false;
 let lastHistogramRenderTime = 0;
 let _deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
+const DEV_SW_CLEANUP_SESSION_KEY = 'colorToy.devServiceWorkerCleanup';
 const UI_LAYOUT_STORAGE_KEY = 'colorToy.ui.layout';
 const MODULE_COLLAPSE_STORAGE_PREFIX = 'colorToy.ui.collapsed.';
 const PREVIEW_SPLIT_STORAGE_PREFIX = 'colorToy.ui.previewSplit.';
@@ -205,7 +247,6 @@ let _wheelMiniMode: WheelMiniMode = 'inside';
 let _lastWheelDisplayLayer: WheelDisplayLayer = 'calibration';
 let miniWheelClampFrame = 0;
 let wheelSurfaceRefreshFrame = 0;
-let _previewControlsManuallyResized = false;
 
 function isCoarsePointerDevice(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
@@ -341,7 +382,6 @@ function init(): void {
 
   // Setup UI event handlers
   setupThemeToggle();
-  setupLayoutStudioEntry();
   setupLayerTabs();
   setupToolbar();
   setupSplitDivider();
@@ -397,7 +437,12 @@ function syncMobileModuleBarSelection(): void {
   const buttons = Array.from(document.querySelectorAll('.mobile-module-btn')) as HTMLButtonElement[];
   buttons.forEach((btn) => {
     const moduleName = btn.dataset.mobileModule as MobileModule | undefined;
-    btn.classList.toggle('active', moduleName === _mobileModuleSelection);
+    const isActive = moduleName === _mobileModuleSelection;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+    if (isActive) {
+      ensureActiveChipVisible(btn);
+    }
   });
 }
 
@@ -460,7 +505,13 @@ function applyWheelLayoutModeUI(state: AppState): void {
   if (activeMode === 'inside') {
     row.classList.add('wheels-compare-inside');
   }
-  btn.textContent = _wheelPanelMode === 'inside' ? 'Panel: In/Out' : 'Panel: L/R';
+  const nextLabel = _wheelPanelMode === 'inside' ? 'Panel: In/Out' : 'Panel: L/R';
+  const nextAction = _wheelPanelMode === 'inside'
+    ? 'Switch wheels panel to left and right mode'
+    : 'Switch wheels panel to inside and outside mode';
+  btn.textContent = nextLabel;
+  btn.title = nextAction;
+  btn.setAttribute('aria-label', nextAction);
 }
 
 function shouldShowMiniWheelPreview(state: AppState): boolean {
@@ -487,6 +538,7 @@ function applyTheme(theme: ThemeMode, button?: HTMLButtonElement | null): void {
   btn.title = nextLabel;
   btn.setAttribute('aria-label', nextLabel);
   btn.classList.toggle('active', theme === 'light');
+  btn.setAttribute('aria-pressed', String(theme === 'light'));
 
   const label = btn.querySelector('.theme-toggle-label') as HTMLElement | null;
   if (label) {
@@ -514,20 +566,6 @@ function setupThemeToggle(): void {
     const next: ThemeMode = current === 'dark' ? 'light' : 'dark';
     window.localStorage.setItem(THEME_STORAGE_KEY, next);
     applyTheme(next, btn);
-  });
-}
-
-function setupLayoutStudioEntry(): void {
-  const entryBtn = document.getElementById('layout-studio-entry-btn') as HTMLButtonElement | null;
-  if (!entryBtn) return;
-
-  entryBtn.addEventListener('click', () => {
-    entryBtn.classList.add('active');
-    entryBtn.setAttribute('aria-pressed', 'true');
-    window.setTimeout(() => {
-      entryBtn.classList.remove('active');
-      entryBtn.setAttribute('aria-pressed', 'false');
-    }, 140);
   });
 }
 
@@ -588,10 +626,10 @@ function onStateChange(state: AppState, _prev: AppState): void {
 // ============ Layer Tabs ============
 
 function setupLayerTabs(): void {
-  const tabs = document.querySelectorAll('.layer-tab');
-  tabs.forEach((tab) => {
+  const tabs = Array.from(document.querySelectorAll('.layer-tab')) as HTMLButtonElement[];
+  tabs.forEach((tab, index) => {
     tab.addEventListener('click', () => {
-      const layer = (tab as HTMLElement).dataset.layer as AppState['ui']['activeLayer'];
+      const layer = tab.dataset.layer as AppState['ui']['activeLayer'];
       const prev = store.getState();
       store.update({
         ui: {
@@ -601,13 +639,41 @@ function setupLayerTabs(): void {
         },
       });
     });
+
+    tab.addEventListener('keydown', (event) => {
+      if (!tabs.length) return;
+
+      let nextIndex = index;
+      if (event.key === 'ArrowRight') {
+        nextIndex = (index + 1) % tabs.length;
+      } else if (event.key === 'ArrowLeft') {
+        nextIndex = (index - 1 + tabs.length) % tabs.length;
+      } else if (event.key === 'Home') {
+        nextIndex = 0;
+      } else if (event.key === 'End') {
+        nextIndex = tabs.length - 1;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      const nextTab = tabs[nextIndex];
+      nextTab.focus();
+      nextTab.click();
+    });
   });
 }
 
 function updateLayerTabs(state: AppState): void {
   document.querySelectorAll('.layer-tab').forEach((tab) => {
-    const el = tab as HTMLElement;
-    el.classList.toggle('active', el.dataset.layer === state.ui.activeLayer);
+    const el = tab as HTMLButtonElement;
+    const isActive = el.dataset.layer === state.ui.activeLayer;
+    el.classList.toggle('active', isActive);
+    el.setAttribute('aria-selected', String(isActive));
+    el.tabIndex = isActive ? 0 : -1;
+    if (isActive) {
+      ensureActiveChipVisible(el);
+    }
   });
 }
 
@@ -1076,7 +1142,6 @@ function setupSplitDivider(): void {
   divider.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
-    _previewControlsManuallyResized = true;
     dragging = true;
     activePointerId = e.pointerId;
     divider.setPointerCapture(e.pointerId);
@@ -1192,8 +1257,13 @@ function setupLayoutControls(): void {
   const updateLayoutButton = (mode: UiLayoutMode) => {
     if (!layoutToggleBtn) return;
     layoutToggleBtn.classList.toggle('active', mode === 'image-priority');
+    layoutToggleBtn.setAttribute('aria-pressed', String(mode === 'image-priority'));
     const label = layoutToggleBtn.querySelector('span') || layoutToggleBtn;
     label.textContent = mode === 'image-priority' ? 'Layout: Image' : 'Layout: Controls';
+    layoutToggleBtn.title = mode === 'image-priority'
+      ? 'Switch to controls priority layout'
+      : 'Switch to image priority layout';
+    layoutToggleBtn.setAttribute('aria-label', layoutToggleBtn.title);
   };
 
   const getStoredLayoutPreference = (): UiLayoutMode => {
@@ -1325,28 +1395,15 @@ function applyPreviewControlsSplit(state: AppState): void {
   const layoutMode = getCurrentLayoutMode();
   const dividerVisible = layoutMode === 'image-priority' && state.imageLoaded;
   divider.classList.toggle('active', dividerVisible);
-  const autoOverlayMode = layoutMode === 'image-priority'
-    && !_previewControlsManuallyResized
-    && _mobileModuleSelection !== 'none';
-  if (autoOverlayMode) {
-    app.style.setProperty('--preview-controls-ratio', '1');
-    app.style.setProperty('--controls-flex-ratio', '0');
-    controls.classList.remove('full-preview');
-    divider.classList.remove('active');
-    return;
-  }
-
-  const imagePriorityModuleOpen = layoutMode === 'image-priority' && _mobileModuleSelection !== 'none';
   const storedRatio = layoutMode === 'image-priority'
     ? state.ui.imagePriorityPreviewRatio
     : state.ui.controlsPriorityPreviewRatio;
-  const expandedRatio = clampPreviewRatio(storedRatio);
-  const ratio = imagePriorityModuleOpen ? expandedRatio : 1;
+  const ratio = clampPreviewRatio(storedRatio);
 
   app.style.setProperty('--preview-controls-ratio', ratio.toFixed(4));
   app.style.setProperty('--controls-flex-ratio', (1 - ratio).toFixed(4));
-  controls.classList.toggle('full-preview', !imagePriorityModuleOpen && layoutMode === 'image-priority');
-  divider.classList.toggle('active', layoutMode === 'image-priority');
+  controls.classList.remove('full-preview');
+  divider.classList.toggle('active', dividerVisible);
 }
 
 function setupPreviewControlsDivider(): void {
@@ -3155,32 +3212,6 @@ function drawHistogram(): void {
   ctx.globalAlpha = 1.0;
 }
 
-function syncCompactAdjustmentHeader(adjustmentMode: boolean): void {
-  const headerLeft = document.querySelector('#header .header-left') as HTMLElement | null;
-  const topActions = document.querySelector('#top-control-bar .top-global-actions') as HTMLElement | null;
-  const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement | null;
-  const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement | null;
-
-  if (!headerLeft || !topActions || !undoBtn || !redoBtn) return;
-
-  if (adjustmentMode) {
-    if (undoBtn.parentElement !== topActions) {
-      topActions.insertBefore(undoBtn, topActions.firstChild);
-    }
-    if (redoBtn.parentElement !== topActions) {
-      topActions.insertBefore(redoBtn, undoBtn.nextSibling);
-    }
-    return;
-  }
-
-  if (undoBtn.parentElement !== headerLeft) {
-    headerLeft.appendChild(undoBtn);
-  }
-  if (redoBtn.parentElement !== headerLeft) {
-    headerLeft.appendChild(redoBtn);
-  }
-}
-
 // ============ UI Updates ============
 
 function updatePanelUI(state: AppState): void {
@@ -3235,7 +3266,12 @@ function updatePanelUI(state: AppState): void {
   const syncActive = (selector: string, key: string, value: string) => {
     document.querySelectorAll(selector).forEach((el) => {
       const btn = el as HTMLElement;
-      btn.classList.toggle('active', btn.dataset[key] === value);
+      const isActive = btn.dataset[key] === value;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
+      if (isActive) {
+        ensureActiveChipVisible(btn);
+      }
     });
   };
 
@@ -3245,13 +3281,11 @@ function updatePanelUI(state: AppState): void {
   syncActive('#toning-control-tabs [data-toning-control]', 'toningControl', _mobileToningControl);
 
   const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
-  const adjustmentMode = imagePriorityMobile && (_mobileModuleSelection === 'wheels' || _mobileModuleSelection === 'calibration' || _mobileModuleSelection === 'mapping' || _mobileModuleSelection === 'toning');
-  const autoOverlay = imagePriorityMobile && !_previewControlsManuallyResized && _mobileModuleSelection !== 'none';
 
-  if (app) app.classList.toggle('auto-overlay-mode', autoOverlay);
-  if (app) app.classList.toggle('compact-adjustment-mode', adjustmentMode);
-
-  syncCompactAdjustmentHeader(adjustmentMode);
+  if (app) {
+    app.classList.remove('auto-overlay-mode');
+    app.classList.remove('compact-adjustment-mode');
+  }
 
   if (imagePriorityMobile && state.ui.activeLayer === 'calibration' && _mobileCalibrationPrimary === 'xy') {
     drawXYDiagram(state);
@@ -3279,16 +3313,19 @@ function updatePanelUI(state: AppState): void {
   if (dockBtn) {
     const shouldShowDock = imagePriorityMobile;
     dockBtn.style.display = shouldShowDock ? 'inline-flex' : 'none';
-    dockBtn.classList.toggle('active', _mobileModuleSelection === 'wheels');
-    dockBtn.classList.toggle('mode-in', _mobileModuleSelection === 'wheels');
-    dockBtn.classList.toggle('mode-out', _mobileModuleSelection !== 'wheels');
-    dockBtn.title = _mobileModuleSelection === 'wheels'
+    const dockActive = _mobileModuleSelection === 'wheels';
+    dockBtn.classList.toggle('active', dockActive);
+    dockBtn.classList.toggle('mode-in', dockActive);
+    dockBtn.classList.toggle('mode-out', !dockActive);
+    dockBtn.title = dockActive
       ? 'Hide Wheels'
       : _wheelMiniMode === 'hidden'
         ? 'Show Wheels Panel'
         : _wheelMiniMode === 'inside'
           ? 'Show Wheels (In/Out)'
           : 'Show Wheels (L/R)';
+    dockBtn.setAttribute('aria-pressed', String(dockActive));
+    dockBtn.setAttribute('aria-label', dockBtn.title);
   }
 
   const nextWheelDisplay = wheelsPanel?.style.display ?? '';
@@ -3378,8 +3415,13 @@ function showError(msg: string): void {
 }
 
 function setupPwaHooks(): void {
+  if (!import.meta.env.PROD) {
+    document.documentElement.classList.remove('pwa-install-ready');
+    _deferredInstallPrompt = null;
+    return;
+  }
+
   window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
     _deferredInstallPrompt = e as BeforeInstallPromptEvent;
     document.documentElement.classList.add('pwa-install-ready');
   });
@@ -3390,8 +3432,53 @@ function setupPwaHooks(): void {
   });
 }
 
+async function clearColorToyCaches(): Promise<void> {
+  if (!('caches' in window)) {
+    return;
+  }
+
+  const cacheKeys = await window.caches.keys();
+  await Promise.all(
+    cacheKeys
+      .filter((key) => key.startsWith('color-toy'))
+      .map((key) => window.caches.delete(key)),
+  );
+}
+
+async function cleanupDevelopmentServiceWorkers(): Promise<void> {
+  if (!('serviceWorker' in navigator)) {
+    return;
+  }
+
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  const hadRegistrations = registrations.length > 0 || !!navigator.serviceWorker.controller;
+
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+  await clearColorToyCaches();
+
+  if (hadRegistrations) {
+    const didReload = window.sessionStorage.getItem(DEV_SW_CLEANUP_SESSION_KEY) === '1';
+    if (!didReload) {
+      window.sessionStorage.setItem(DEV_SW_CLEANUP_SESSION_KEY, '1');
+      window.location.reload();
+      return;
+    }
+  }
+
+  window.sessionStorage.removeItem(DEV_SW_CLEANUP_SESSION_KEY);
+}
+
 function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) {
+    return;
+  }
+
+  if (!import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      cleanupDevelopmentServiceWorkers().catch((error) => {
+        console.warn('Development service worker cleanup failed:', error);
+      });
+    });
     return;
   }
 
