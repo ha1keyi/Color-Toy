@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getScaledRasterDimensions, scaleRawRgba16 } from './rasterSource';
+import { getScaledRasterDimensions, scaleRawRgba16, scaleRasterSourceToMaxDim } from './rasterSource';
 
 describe('rasterSource helpers', () => {
   it('scales dimensions to the requested max edge', () => {
@@ -29,5 +29,29 @@ describe('rasterSource helpers', () => {
     const scaled = scaleRawRgba16(source, 2, 2, 1, 1);
 
     expect(Array.from(scaled)).toEqual([32768, 32768, 0, 65535]);
+  });
+
+  it('preserves RAW transfer metadata when scaling raster sources', () => {
+    const scaled = scaleRasterSourceToMaxDim({
+      kind: 'raw-rgba16',
+      data: new Uint16Array([
+        0, 0, 0, 65535,
+        65535, 0, 0, 65535,
+        0, 65535, 0, 65535,
+        65535, 65535, 0, 65535,
+      ]),
+      width: 2,
+      height: 2,
+      transfer: 'linear-srgb',
+      metadata: { camera: 'test' },
+    }, 1);
+
+    expect(scaled).toMatchObject({
+      kind: 'raw-rgba16',
+      width: 1,
+      height: 1,
+      transfer: 'linear-srgb',
+      metadata: { camera: 'test' },
+    });
   });
 });

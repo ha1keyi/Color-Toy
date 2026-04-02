@@ -4,7 +4,19 @@ const SUPPORTED_RAW_EXTENSIONS = new Set(['cr2', 'cr3', 'nef']);
 
 type RawPixelBuffer = Uint8Array | Uint16Array;
 
+interface LibRawImageDataObject extends Record<string, unknown> {
+  width?: number;
+  height?: number;
+  colors?: number;
+  bits?: number;
+  dataSize?: number;
+  data?: RawPixelBuffer;
+}
+
+type LibRawImageDataResponse = RawPixelBuffer | LibRawImageDataObject;
+
 interface LibRawOpenSettings {
+  bright?: number;
   outputColor?: number;
   outputBps?: 8 | 16;
   noAutoBright?: boolean;
@@ -12,6 +24,7 @@ interface LibRawOpenSettings {
   useCameraMatrix?: number;
   highlight?: number;
   userQual?: number;
+  gamm?: [number, number] | null;
 }
 
 interface LibRawMetadata extends Record<string, unknown> {
@@ -23,7 +36,7 @@ interface LibRawMetadata extends Record<string, unknown> {
 interface LibRawInstance {
   open(data: Uint8Array, settings?: LibRawOpenSettings): Promise<unknown>;
   metadata(fullOutput?: boolean): Promise<LibRawMetadata>;
-  imageData(): Promise<RawPixelBuffer>;
+  imageData(): Promise<LibRawImageDataResponse>;
 }
 
 interface LibRawConstructor {
@@ -35,6 +48,7 @@ export interface DecodedRawImage extends RawRasterSource {
 }
 
 const DEFAULT_RAW_SETTINGS: LibRawOpenSettings = {
+  bright: 1,
   outputColor: 1,
   outputBps: 16,
   noAutoBright: true,
@@ -42,6 +56,7 @@ const DEFAULT_RAW_SETTINGS: LibRawOpenSettings = {
   useCameraMatrix: 3,
   highlight: 5,
   userQual: 3,
+  gamm: [1, 1],
 };
 
 let decoderCtorPromise: Promise<LibRawConstructor> | null = null;
@@ -61,6 +76,10 @@ function readNumber(value: unknown): number | null {
   return null;
 }
 
+function isRawPixelBuffer(value: unknown): value is RawPixelBuffer {
+  return value instanceof Uint8Array || value instanceof Uint16Array;
+}
+
 function readPathNumber(source: Record<string, unknown> | undefined, path: string): number | null {
   if (!source) {
     return null;
@@ -77,7 +96,51 @@ function readPathNumber(source: Record<string, unknown> | undefined, path: strin
   return readNumber(current);
 }
 
-function resolveDecodedDimensions(metadata: LibRawMetadata, sampleCount: number): { width: number; height: number; channels: number } {
+export function resolveLibRawImageDataPayload(imageData: LibRawImageDataResponse): {
+  buffer: RawPixelBuffer;
+  width: number | null;
+  height: number | null;
+  channels: number | null;
+} {
+  if (isRawPixelBuffer(imageData)) {
+    return {
+      buffer: imageData,
+      width: null,
+      height: null,
+      channels: null,
+    };
+  }
+
+  if (imageData && typeof imageData === 'object' && isRawPixelBuffer(imageData.data)) {
+    return {
+      buffer: imageData.data,
+      width: readNumber(imageData.width),
+      height: readNumber(imageData.height),
+      channels: readNumber(imageData.colors),
+    };
+  }
+
+  throw new Error('RAW decode returned an unsupported imageData payload.');
+}
+
+export function resolveDecodedDimensions(
+  metadata: LibRawMetadata,
+  sampleCount: number,
+  widthHint?: number | null,
+  heightHint?: number | null,
+  channelsHint?: number | null,
+): { width: number; height: number; channels: number } {
+  if (widthHint && heightHint) {
+    if (channelsHint && widthHint * heightHint * channelsHint === sampleCount) {
+      return { width: widthHint, height: heightHint, channels: channelsHint };
+    }
+
+    const inferredChannels = sampleCount / (widthHint * heightHint);
+    if (Number.isInteger(inferredChannels) && (inferredChannels === 3 || inferredChannels === 4)) {
+      return { width: widthHint, height: heightHint, channels: inferredChannels };
+    }
+  }
+
   const candidatePairs: Array<[string, string]> = [
     ['sizes.width', 'sizes.height'],
     ['sizes.iwidth', 'sizes.iheight'],
@@ -114,7 +177,9 @@ function resolveDecodedDimensions(metadata: LibRawMetadata, sampleCount: number)
     }
   }
 
-  throw new Error('RAW decode succeeded but decoded dimensions could not be resolved.');
+  throw new Error(
+    `RAW decode succeeded but decoded dimensions could not be resolved (samples=${sampleCount}, widthHint=${widthHint ?? 'n/a'}, heightHint=${heightHint ?? 'n/a'}, channelsHint=${channelsHint ?? 'n/a'}).`,
+  );
 }
 
 function convertRgbBufferToRgba16(buffer: RawPixelBuffer, width: number, height: number, channels: number): Uint16Array {
@@ -178,15 +243,23 @@ export async function decodeRawFile(file: File): Promise<DecodedRawImage> {
     metadata = await decoder.metadata(false);
   }
 
-  const pixelBuffer = await decoder.imageData();
-  const { width, height, channels } = resolveDecodedDimensions(metadata, pixelBuffer.length);
-  const data = convertRgbBufferToRgba16(pixelBuffer, width, height, channels);
+  const imageData = await decoder.imageData();
+  const payload = resolveLibRawImageDataPayload(imageData);
+  const { width, height, channels } = resolveDecodedDimensions(
+    metadata,
+    payload.buffer.length,
+    payload.width,
+    payload.height,
+    payload.channels,
+  );
+  const data = convertRgbBufferToRgba16(payload.buffer, width, height, channels);
 
   return {
     kind: 'raw-rgba16',
     data,
     width,
     height,
+    transfer: 'linear-srgb',
     metadata,
   };
 }

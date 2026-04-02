@@ -37,6 +37,7 @@ uniform int u_enableProcessing; // 1 = process, 0 = passthrough
 uniform int u_useToneCurve;     // 1 = apply tone curve LUT
 uniform int u_workingColorSpace; // 0 = linear sRGB, 1 = ACEScg
 uniform int u_gamutCompression;  // 1 = enable compression
+uniform int u_inputIsLinear;     // 1 = source texture is already linear
 
 // sRGB <-> Linear (IEC 61966-2-1)
 float srgb_to_linear(float c) {
@@ -192,20 +193,22 @@ vec3 applyToneCurve(vec3 rgb) {
 
 void main() {
   vec4 texColor = texture(u_image, v_texCoord);
+  vec3 inputLinearRGB = u_inputIsLinear == 1 ? texColor.rgb : srgb_to_linear_v(texColor.rgb);
+  vec3 passthroughRGB = u_inputIsLinear == 1 ? linear_to_srgb_v(inputLinearRGB) : texColor.rgb;
 
   // Split view: left side original
   if (u_splitView == 1 && v_texCoord.x < u_splitPosition) {
-    fragColor = texColor;
+    fragColor = vec4(clamp(passthroughRGB, 0.0, 1.0), texColor.a);
     return;
   }
 
   if (u_enableProcessing == 0) {
-    fragColor = texColor;
+    fragColor = vec4(clamp(passthroughRGB, 0.0, 1.0), texColor.a);
     return;
   }
 
-  // Step 1: sRGB -> Linear
-  vec3 linearRGB = srgb_to_linear_v(texColor.rgb);
+  // Step 1: input -> Linear
+  vec3 linearRGB = inputLinearRGB;
   vec3 workingRGB = u_workingColorSpace == 1
     ? linear_srgb_to_acescg(linearRGB)
     : linearRGB;
@@ -274,6 +277,7 @@ uniform int u_enableProcessing;
 uniform int u_useToneCurve;
 uniform int u_workingColorSpace;
 uniform int u_gamutCompression;
+uniform int u_inputIsLinear;
 
 float srgb_to_linear(float c) {
   return (c <= 0.04045) ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4);
@@ -404,15 +408,17 @@ vec3 applyToneCurve(vec3 rgb) {
 
 void main() {
   vec4 texColor = texture2D(u_image, v_texCoord);
+  vec3 inputLinearRGB = u_inputIsLinear == 1 ? texColor.rgb : srgb_to_linear_v(texColor.rgb);
+  vec3 passthroughRGB = u_inputIsLinear == 1 ? linear_to_srgb_v(inputLinearRGB) : texColor.rgb;
   if (u_splitView == 1 && v_texCoord.x < u_splitPosition) {
-    gl_FragColor = texColor;
+    gl_FragColor = vec4(clamp(passthroughRGB, 0.0, 1.0), texColor.a);
     return;
   }
   if (u_enableProcessing == 0) {
-    gl_FragColor = texColor;
+    gl_FragColor = vec4(clamp(passthroughRGB, 0.0, 1.0), texColor.a);
     return;
   }
-  vec3 linearRGB = srgb_to_linear_v(texColor.rgb);
+  vec3 linearRGB = inputLinearRGB;
   vec3 workingRGB = u_workingColorSpace == 1
     ? linear_srgb_to_acescg(linearRGB)
     : linearRGB;

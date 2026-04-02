@@ -7,11 +7,14 @@ export interface BitmapRasterSource {
   height: number;
 }
 
+export type RawTransferFunction = 'srgb' | 'linear-srgb';
+
 export interface RawRasterSource {
   kind: 'raw-rgba16';
   data: Uint16Array;
   width: number;
   height: number;
+  transfer: RawTransferFunction;
   metadata?: Record<string, unknown>;
 }
 
@@ -22,12 +25,25 @@ export interface PreviewRasterAssets {
   analysisCanvas: HTMLCanvasElement;
 }
 
+export interface PreviewRasterBuildOptions {
+  analysisMaxDim: number;
+  renderMaxDim?: number;
+}
+
 function getBitmapWidth(bitmap: BitmapRenderableSource): number {
   return bitmap instanceof HTMLImageElement ? (bitmap.naturalWidth || bitmap.width) : bitmap.width;
 }
 
 function getBitmapHeight(bitmap: BitmapRenderableSource): number {
   return bitmap instanceof HTMLImageElement ? (bitmap.naturalHeight || bitmap.height) : bitmap.height;
+}
+
+function linearToSrgb8(value: number): number {
+  const normalized = Math.max(0, Math.min(1, value / 65535));
+  const encoded = normalized <= 0.0031308
+    ? normalized * 12.92
+    : 1.055 * Math.pow(normalized, 1 / 2.4) - 0.055;
+  return Math.round(Math.max(0, Math.min(1, encoded)) * 255);
 }
 
 export function createBitmapRasterSource(bitmap: BitmapRenderableSource): BitmapRasterSource {
@@ -65,10 +81,20 @@ export function getScaledRasterDimensions(width: number, height: number, maxDim:
   };
 }
 
-function quantizeRaw16ToRgba8(data: Uint16Array): Uint8ClampedArray {
+function quantizeRaw16ToRgba8(data: Uint16Array, transfer: RawTransferFunction): Uint8ClampedArray {
   const rgba = new Uint8ClampedArray(data.length);
-  for (let i = 0; i < data.length; i++) {
-    rgba[i] = Math.max(0, Math.min(255, Math.round(data[i] / 257)));
+  if (transfer === 'srgb') {
+    for (let i = 0; i < data.length; i++) {
+      rgba[i] = Math.max(0, Math.min(255, Math.round(data[i] / 257)));
+    }
+    return rgba;
+  }
+
+  for (let i = 0; i < data.length; i += 4) {
+    rgba[i] = linearToSrgb8(data[i] ?? 0);
+    rgba[i + 1] = linearToSrgb8(data[i + 1] ?? 0);
+    rgba[i + 2] = linearToSrgb8(data[i + 2] ?? 0);
+    rgba[i + 3] = Math.max(0, Math.min(255, Math.round((data[i + 3] ?? 65535) / 257)));
   }
   return rgba;
 }
@@ -92,7 +118,7 @@ export function rasterSourceToCanvas(source: RasterSource): HTMLCanvasElement {
     return canvas;
   }
 
-  const quantized = quantizeRaw16ToRgba8(source.data);
+  const quantized = quantizeRaw16ToRgba8(source.data, source.transfer);
   const imageBytes = new Uint8ClampedArray(quantized.length);
   imageBytes.set(quantized);
   const imageData = new ImageData(imageBytes, source.width, source.height);
@@ -166,14 +192,16 @@ export function scaleRasterSourceToMaxDim(source: RasterSource, maxDim: number):
     data: scaleRawRgba16(source.data, source.width, source.height, width, height),
     width,
     height,
+    transfer: source.transfer,
     metadata: source.metadata,
   };
 }
 
-export function buildPreviewRasterAssets(source: RasterSource, maxDim: number): PreviewRasterAssets {
-  const renderSource = scaleRasterSourceToMaxDim(source, maxDim);
+export function buildPreviewRasterAssets(source: RasterSource, options: PreviewRasterBuildOptions): PreviewRasterAssets {
+  const renderSource = scaleRasterSourceToMaxDim(source, options.renderMaxDim ?? options.analysisMaxDim);
+  const analysisSource = scaleRasterSourceToMaxDim(source, options.analysisMaxDim);
   return {
     renderSource,
-    analysisCanvas: rasterSourceToCanvas(renderSource),
+    analysisCanvas: rasterSourceToCanvas(analysisSource),
   };
 }

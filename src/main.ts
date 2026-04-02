@@ -19,6 +19,7 @@ import {
   getMaxRasterDimension,
   getRasterHeight,
   getRasterWidth,
+  isRawRasterSource,
   scaleRasterSourceToMaxDim,
   type RasterSource,
 } from './core/image/rasterSource';
@@ -315,8 +316,25 @@ function persistPreviewQualityMode(mode: PreviewQualityMode): void {
   window.localStorage.setItem(PREVIEW_QUALITY_STORAGE_KEY, mode);
 }
 
+function getRawPreviewResolutionScale(state: AppState): number {
+  if (!originalRasterSource || !isRawRasterSource(originalRasterSource)) {
+    return 1;
+  }
+
+  const maxSourceDim = getMaxRasterDimension(originalRasterSource);
+  if (maxSourceDim <= 0) {
+    return 1;
+  }
+
+  return Math.max(0.5, Math.min(1, state.ui.previewResolution / maxSourceDim));
+}
+
 function getEffectiveRenderScale(state: AppState): number {
-  return state.ui.previewQualityMode === 'full' ? 1 : getAdaptiveRenderScale();
+  if (state.ui.previewQualityMode === 'full') {
+    return 1;
+  }
+
+  return Math.min(getAdaptiveRenderScale(), getRawPreviewResolutionScale(state));
 }
 
 function getRequestedPreviewMaxDim(state: AppState): number {
@@ -1066,7 +1084,17 @@ function rebuildPreviewFromOriginal(maxDim: number): void {
     return;
   }
 
-  const previewAssets = buildPreviewRasterAssets(originalRasterSource, maxDim);
+  const renderMaxDim = isRawRasterSource(originalRasterSource)
+    ? Math.min(
+      getMaxRasterDimension(originalRasterSource),
+      renderer?.capabilities.maxTextureSize ?? getMaxRasterDimension(originalRasterSource),
+    )
+    : maxDim;
+
+  const previewAssets = buildPreviewRasterAssets(originalRasterSource, {
+    analysisMaxDim: maxDim,
+    renderMaxDim,
+  });
   previewRasterSource = previewAssets.renderSource;
   previewCanvas = previewAssets.analysisCanvas;
   refreshDominantImageHues();
@@ -2707,7 +2735,11 @@ function exportImage(): void {
     },
   };
 
-  const exportSource = scaleRasterSourceToMaxDim(originalRasterSource, 4096);
+  const maxExportDim = Math.min(
+    getMaxRasterDimension(originalRasterSource),
+    renderer?.capabilities.maxTextureSize ?? getMaxRasterDimension(originalRasterSource),
+  );
+  const exportSource = scaleRasterSourceToMaxDim(originalRasterSource, maxExportDim);
   const offCanvas = document.createElement('canvas');
   offCanvas.width = getRasterWidth(exportSource);
   offCanvas.height = getRasterHeight(exportSource);
@@ -3839,12 +3871,12 @@ function handleResize(): void {
 
   scheduleMiniWheelPreviewClamp();
 
-  if (previewCanvas) {
+  if (previewRasterSource) {
     const container = document.getElementById('preview-container');
     const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
     if (container && glCanvas) {
       const rect = container.getBoundingClientRect();
-      const aspect = previewCanvas.width / previewCanvas.height;
+      const aspect = previewRasterSource.width / previewRasterSource.height;
       let cssW = rect.width;
       let cssH = cssW / aspect;
       if (cssH > rect.height) {
@@ -3853,7 +3885,7 @@ function handleResize(): void {
       }
       glCanvas.style.width = Math.floor(cssW) + 'px';
       glCanvas.style.height = Math.floor(cssH) + 'px';
-      renderer.resize(previewCanvas.width, previewCanvas.height);
+      renderer.resize(previewRasterSource.width, previewRasterSource.height);
       syncPreviewTransformToLayout();
       renderer.updateUniforms(state);
       renderer.render();

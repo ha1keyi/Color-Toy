@@ -144,7 +144,7 @@ export class Renderer {
       'u_numMappings', 'u_exposure', 'u_contrast',
       'u_highlights', 'u_shadows', 'u_whites', 'u_blacks',
       'u_splitPosition', 'u_splitView', 'u_enableProcessing', 'u_useToneCurve',
-      'u_workingColorSpace', 'u_gamutCompression',
+      'u_workingColorSpace', 'u_gamutCompression', 'u_inputIsLinear',
     ];
     for (const name of uniformNames) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
@@ -312,6 +312,12 @@ export class Renderer {
     } else {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, rasterSource.bitmap);
     }
+
+    gl.useProgram(this.program);
+    gl.uniform1i(
+      this.uniforms['u_inputIsLinear'],
+      isRawRasterSource(rasterSource) && rasterSource.transfer === 'linear-srgb' ? 1 : 0,
+    );
 
     this._imageWidth = rasterSource.width;
     this._imageHeight = rasterSource.height;
