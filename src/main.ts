@@ -8,10 +8,20 @@ import {
   SRGB_RED_XY, SRGB_GREEN_XY, SRGB_BLUE_XY, D65_WHITE_XY,
   calibrationToPrimaries, primariesToCalibration,
 } from './state/types';
-import type { AppState, LocalMapping } from './state/types';
+import type { AppState, LocalMapping, PreviewQualityMode } from './state/types';
 import { Renderer } from './gpu/renderer';
 import { ColorWheel } from './ui/wheel/colorWheel';
 import { rgbToHsv } from './core/color/conversions';
+import { decodeRawFile, isSupportedRawFile } from './core/image/rawDecoder';
+import {
+  buildPreviewRasterAssets,
+  createBitmapRasterSource,
+  getMaxRasterDimension,
+  getRasterHeight,
+  getRasterWidth,
+  scaleRasterSourceToMaxDim,
+  type RasterSource,
+} from './core/image/rasterSource';
 import {
   BUILTIN_PRESETS, getStoredPresets, savePreset,
   createColorStylePreset, createCreativeMappingPreset,
@@ -37,7 +47,8 @@ import { setupLayoutProfileManager } from './ui/layout/layoutProfileManager';
 // DOM references
 let renderer: Renderer;
 let colorWheel: ColorWheel;
-let originalImage: HTMLImageElement | null = null;
+let originalRasterSource: RasterSource | null = null;
+let previewRasterSource: RasterSource | null = null;
 let previewCanvas: HTMLCanvasElement | null = null;
 let renderedWheelCanvas: HTMLCanvasElement | null = null;
 let dominantImageHues: number[] = [];
@@ -52,6 +63,14 @@ type MobileModule = 'none' | 'wheels' | 'calibration' | 'mapping' | 'toning' | '
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
+interface PreviewPinchState {
+  pointerIds: [number, number];
+  initialDistance: number;
+  initialScale: number;
+  anchorX: number;
+  anchorY: number;
 }
 
 function readCssVar(name: string, fallback: string): string {
@@ -235,7 +254,11 @@ const DEV_SW_CLEANUP_SESSION_KEY = 'colorToy.devServiceWorkerCleanup';
 const UI_LAYOUT_STORAGE_KEY = 'colorToy.ui.layout';
 const MODULE_COLLAPSE_STORAGE_PREFIX = 'colorToy.ui.collapsed.';
 const PREVIEW_SPLIT_STORAGE_PREFIX = 'colorToy.ui.previewSplit.';
+const PREVIEW_QUALITY_STORAGE_KEY = 'colorToy.ui.previewQuality';
 const WHEELS_MINI_POSITION_STORAGE_KEY = 'colorToy.ui.wheelsMiniPosition';
+const PREVIEW_ZOOM_MIN = 1;
+const PREVIEW_ZOOM_MAX = 4;
+const PREVIEW_TAP_MOVE_THRESHOLD = 12;
 let _mobileModuleSelection: MobileModule = 'none';
 let _mobileCalibrationPrimary: 'none' | 'xy' | 'red' | 'green' | 'blue' = 'none';
 let _mobileMappingMode: 'global' | 'point' = 'global';
@@ -247,6 +270,11 @@ let _wheelMiniMode: WheelMiniMode = 'inside';
 let _lastWheelDisplayLayer: WheelDisplayLayer = 'calibration';
 let miniWheelClampFrame = 0;
 let wheelSurfaceRefreshFrame = 0;
+let _previewControlsDividerPromoted = false;
+let previewZoomScale = 1;
+let previewTranslateX = 0;
+let previewTranslateY = 0;
+let previewLastTouchInteractionAt = 0;
 
 function isCoarsePointerDevice(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
@@ -277,6 +305,138 @@ function getAdaptiveRenderScale(): number {
   }
 
   return Math.max(0.55, Math.min(1, scale));
+}
+
+function readStoredPreviewQualityMode(): PreviewQualityMode {
+  return window.localStorage.getItem(PREVIEW_QUALITY_STORAGE_KEY) === 'full' ? 'full' : 'adaptive';
+}
+
+function persistPreviewQualityMode(mode: PreviewQualityMode): void {
+  window.localStorage.setItem(PREVIEW_QUALITY_STORAGE_KEY, mode);
+}
+
+function getEffectiveRenderScale(state: AppState): number {
+  return state.ui.previewQualityMode === 'full' ? 1 : getAdaptiveRenderScale();
+}
+
+function getRequestedPreviewMaxDim(state: AppState): number {
+  if (!originalRasterSource || state.ui.previewQualityMode !== 'full') {
+    return state.ui.previewResolution;
+  }
+
+  const maxSourceDim = getMaxRasterDimension(originalRasterSource);
+  const maxTextureSize = renderer?.capabilities.maxTextureSize ?? maxSourceDim;
+  return Math.min(maxSourceDim, maxTextureSize);
+}
+
+function getPreviewCanvasMetrics(): {
+  containerRect: DOMRect;
+  width: number;
+  height: number;
+  centerX: number;
+  centerY: number;
+} | null {
+  const container = document.getElementById('preview-container') as HTMLElement | null;
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  if (!container || !glCanvas) {
+    return null;
+  }
+
+  const width = glCanvas.offsetWidth || parsePixelValue(glCanvas.style.width);
+  const height = glCanvas.offsetHeight || parsePixelValue(glCanvas.style.height);
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const centerX = containerRect.left + glCanvas.offsetLeft + width / 2;
+  const centerY = containerRect.top + glCanvas.offsetTop + height / 2;
+  return { containerRect, width, height, centerX, centerY };
+}
+
+function clampPreviewTransform(scale: number, translateX: number, translateY: number): {
+  scale: number;
+  translateX: number;
+  translateY: number;
+} {
+  const clampedScale = Math.max(PREVIEW_ZOOM_MIN, Math.min(PREVIEW_ZOOM_MAX, scale));
+  if (clampedScale <= PREVIEW_ZOOM_MIN + 0.001) {
+    return {
+      scale: PREVIEW_ZOOM_MIN,
+      translateX: 0,
+      translateY: 0,
+    };
+  }
+
+  const metrics = getPreviewCanvasMetrics();
+  if (!metrics) {
+    return {
+      scale: clampedScale,
+      translateX,
+      translateY,
+    };
+  }
+
+  const maxTranslateX = Math.max(0, (metrics.width * clampedScale - metrics.containerRect.width) / 2);
+  const maxTranslateY = Math.max(0, (metrics.height * clampedScale - metrics.containerRect.height) / 2);
+  return {
+    scale: clampedScale,
+    translateX: Math.max(-maxTranslateX, Math.min(maxTranslateX, translateX)),
+    translateY: Math.max(-maxTranslateY, Math.min(maxTranslateY, translateY)),
+  };
+}
+
+function applyPreviewTransform(): void {
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  if (!glCanvas) {
+    return;
+  }
+
+  if (previewZoomScale <= PREVIEW_ZOOM_MIN + 0.001) {
+    previewZoomScale = PREVIEW_ZOOM_MIN;
+    previewTranslateX = 0;
+    previewTranslateY = 0;
+    glCanvas.style.transform = '';
+    glCanvas.classList.remove('is-zoomed');
+  } else {
+    glCanvas.style.transform = `translate3d(${previewTranslateX}px, ${previewTranslateY}px, 0) scale(${previewZoomScale})`;
+    glCanvas.classList.add('is-zoomed');
+  }
+
+  updateSplitDividerUI(store.getState());
+}
+
+function setPreviewTransform(scale: number, translateX: number, translateY: number): void {
+  const next = clampPreviewTransform(scale, translateX, translateY);
+  previewZoomScale = next.scale;
+  previewTranslateX = next.translateX;
+  previewTranslateY = next.translateY;
+  applyPreviewTransform();
+}
+
+function resetPreviewTransform(): void {
+  previewZoomScale = PREVIEW_ZOOM_MIN;
+  previewTranslateX = 0;
+  previewTranslateY = 0;
+  applyPreviewTransform();
+}
+
+function syncPreviewTransformToLayout(): void {
+  setPreviewTransform(previewZoomScale, previewTranslateX, previewTranslateY);
+}
+
+function syncPreviewControlsDividerLayer(): void {
+  const divider = document.getElementById('preview-controls-divider') as HTMLElement | null;
+  if (!divider) {
+    return;
+  }
+
+  divider.classList.toggle('is-promoted', _previewControlsDividerPromoted);
+}
+
+function setPreviewControlsDividerPromoted(active: boolean): void {
+  _previewControlsDividerPromoted = active;
+  syncPreviewControlsDividerLayer();
 }
 
 function requestUiRender(target: 'wheel' | 'histogram' | 'all' = 'all'): void {
@@ -353,10 +513,21 @@ function init(): void {
   // Always wire file input first so upload button works even if later init fails.
   setupImageInput();
 
+  const initialState = store.getState();
+  const storedPreviewQualityMode = readStoredPreviewQualityMode();
+  if (initialState.ui.previewQualityMode !== storedPreviewQualityMode) {
+    store.update({
+      ui: {
+        ...initialState.ui,
+        previewQualityMode: storedPreviewQualityMode,
+      },
+    });
+  }
+
   // Initialize renderer
   try {
     renderer = new Renderer(glCanvas);
-    renderer.setRenderScale(getAdaptiveRenderScale());
+    renderer.setRenderScale(getEffectiveRenderScale(store.getState()));
     updateCapabilitiesDisplay();
   } catch (e) {
     const details = e instanceof Error ? e.message : String(e);
@@ -384,6 +555,7 @@ function init(): void {
   setupThemeToggle();
   setupLayerTabs();
   setupToolbar();
+  setupPreviewCanvasInteractions();
   setupSplitDivider();
   setupCompareHint();
   setupPanels();
@@ -429,7 +601,11 @@ function init(): void {
 }
 
 function setMobileModuleSelection(value: MobileModule): void {
-  _mobileModuleSelection = value === 'color-management' ? 'none' : value;
+  const nextValue = value === 'color-management' ? 'none' : value;
+  if (_mobileModuleSelection !== nextValue) {
+    setPreviewControlsDividerPromoted(false);
+  }
+  _mobileModuleSelection = nextValue;
   syncMobileModuleBarSelection();
 }
 
@@ -516,11 +692,20 @@ function applyWheelLayoutModeUI(state: AppState): void {
 
 function shouldShowMiniWheelPreview(state: AppState): boolean {
   const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
-  if (!imagePriorityMobile || _mobileModuleSelection === 'wheels' || _wheelMiniMode === 'hidden') {
+  if (!imagePriorityMobile || !state.imageLoaded || _mobileModuleSelection === 'wheels' || _wheelMiniMode === 'hidden') {
     return false;
   }
 
   return true;
+}
+
+function shouldKeepMobileControlsVisible(state: AppState): boolean {
+  const imagePriorityMobile = isMobileCompactViewport() && getCurrentLayoutMode() === 'image-priority';
+  if (!imagePriorityMobile) {
+    return true;
+  }
+
+  return _mobileModuleSelection !== 'none';
 }
 
 function applyTheme(theme: ThemeMode, button?: HTMLButtonElement | null): void {
@@ -711,7 +896,7 @@ function setupImageInput(): void {
   if (input) {
     input.addEventListener('change', (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) loadImageFile(file);
+      if (file) void loadImageFile(file);
     });
   }
 
@@ -727,7 +912,7 @@ function setupImageInput(): void {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
       const file = e.dataTransfer?.files[0];
-      if (file) loadImageFile(file);
+      if (file) void loadImageFile(file);
     });
   }
 }
@@ -791,10 +976,32 @@ async function readIccProfileFromFile(file: File): Promise<{ name: string | null
   return { name: null, source: null };
 }
 
-function loadImageFile(file: File): void {
-  if (!file.type.startsWith('image/')) return;
-  if (!renderer) {
-    showError('Renderer is not initialized, image cannot be processed.');
+async function loadBitmapRasterSource(file: File): Promise<RasterSource> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to decode image file ${file.name}.`));
+      img.src = objectUrl;
+    });
+
+    return createBitmapRasterSource(image);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function updateImportedProfileState(file: File): void {
+  if (isSupportedRawFile(file)) {
+    const state = store.getState();
+    store.update({
+      ui: {
+        ...state.ui,
+        importedIccProfileName: null,
+        importedIccSource: null,
+      },
+    });
     return;
   }
 
@@ -819,68 +1026,92 @@ function loadImageFile(file: File): void {
         },
       });
     });
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      originalImage = img;
-
-      // Create preview canvas (long edge <= resolution limit)
-      const maxDim = store.getState().ui.previewResolution;
-      previewCanvas = scaleImageToCanvas(img, maxDim);
-      refreshDominantImageHues();
-
-      // Size the GL canvas to match image resolution
-      const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
-      renderer.setRenderScale(getAdaptiveRenderScale());
-      renderer.resize(previewCanvas.width, previewCanvas.height);
-
-      // Set CSS size to fit container
-      const container = document.getElementById('preview-container');
-      if (container && glCanvas) {
-        const rect = container.getBoundingClientRect();
-        const aspect = previewCanvas.width / previewCanvas.height;
-        let cssW = rect.width;
-        let cssH = cssW / aspect;
-        if (cssH > rect.height) {
-          cssH = rect.height;
-          cssW = cssH * aspect;
-        }
-        glCanvas.style.width = Math.floor(cssW) + 'px';
-        glCanvas.style.height = Math.floor(cssH) + 'px';
-      }
-
-      renderer.loadImage(previewCanvas);
-      const state = store.getState();
-      renderer.updateUniforms(state);
-      renderer.render();
-
-      store.update({ imageLoaded: true });
-
-      // Hide drop zone, show canvas
-      const dropZone = document.getElementById('drop-zone');
-      if (dropZone) dropZone.style.display = 'none';
-      if (glCanvas) glCanvas.style.display = 'block';
-    };
-    img.src = e.target?.result as string;
-  };
-  reader.readAsDataURL(file);
 }
 
-function scaleImageToCanvas(img: HTMLImageElement, maxDim: number): HTMLCanvasElement {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
-  const scale = Math.min(maxDim / Math.max(w, h), 1);
+function sizePreviewCanvas(width: number, height: number): void {
+  const container = document.getElementById('preview-container');
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  if (!container || !glCanvas) {
+    return;
+  }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.floor(w * scale);
-  canvas.height = Math.floor(h * scale);
+  const rect = container.getBoundingClientRect();
+  const aspect = width / height;
+  let cssW = rect.width;
+  let cssH = cssW / aspect;
+  if (cssH > rect.height) {
+    cssH = rect.height;
+    cssW = cssH * aspect;
+  }
+  glCanvas.style.width = Math.floor(cssW) + 'px';
+  glCanvas.style.height = Math.floor(cssH) + 'px';
+}
 
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+function renderPreviewSource(): void {
+  if (!previewRasterSource) {
+    return;
+  }
 
-  return canvas;
+  renderer.resize(previewRasterSource.width, previewRasterSource.height);
+  sizePreviewCanvas(previewRasterSource.width, previewRasterSource.height);
+  renderer.loadImage(previewRasterSource);
+  const state = store.getState();
+  renderer.updateUniforms(state);
+  renderer.render();
+  syncPreviewTransformToLayout();
+}
+
+function rebuildPreviewFromOriginal(maxDim: number): void {
+  if (!originalRasterSource) {
+    return;
+  }
+
+  const previewAssets = buildPreviewRasterAssets(originalRasterSource, maxDim);
+  previewRasterSource = previewAssets.renderSource;
+  previewCanvas = previewAssets.analysisCanvas;
+  refreshDominantImageHues();
+  renderPreviewSource();
+}
+
+async function loadImageFile(file: File): Promise<void> {
+  const rawFile = isSupportedRawFile(file);
+  if (!rawFile && !file.type.startsWith('image/')) return;
+  if (!renderer) {
+    showError('Renderer is not initialized, image cannot be processed.');
+    return;
+  }
+
+  if (rawFile && !renderer.capabilities.losslessRawImport) {
+    showError('This browser or GPU does not support 16-bit RAW texture upload. Lossless RAW import requires WebGL2 with EXT_texture_norm16.');
+    return;
+  }
+
+  updateImportedProfileState(file);
+
+  try {
+    originalRasterSource = rawFile
+      ? await decodeRawFile(file)
+      : await loadBitmapRasterSource(file);
+
+    const state = store.getState();
+    renderer.setRenderScale(getEffectiveRenderScale(state));
+    rebuildPreviewFromOriginal(getRequestedPreviewMaxDim(state));
+    store.update({ imageLoaded: true });
+
+    const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+    const dropZone = document.getElementById('drop-zone');
+    if (dropZone) dropZone.style.display = 'none';
+    if (glCanvas) glCanvas.style.display = 'block';
+    resetPreviewTransform();
+    setPreviewControlsDividerPromoted(false);
+    handleResize();
+  } catch (error) {
+    console.error('Image load failed:', error);
+    const details = error instanceof Error ? error.message : String(error);
+    showError(`Failed to load ${file.name}. ${rawFile
+      ? `RAW import error: ${details}`
+      : 'Please choose a valid image file.'}`);
+  }
 }
 
 function normalizeHue01(h: number): number {
@@ -1067,49 +1298,259 @@ function setupToolbar(): void {
     });
   }
 
+  const previewQualityBtn = document.getElementById('preview-quality-btn') as HTMLButtonElement | null;
+  if (previewQualityBtn) {
+    previewQualityBtn.addEventListener('click', () => {
+      const state = store.getState();
+      const nextMode: PreviewQualityMode = state.ui.previewQualityMode === 'adaptive' ? 'full' : 'adaptive';
+      persistPreviewQualityMode(nextMode);
+      store.update({
+        ui: {
+          ...state.ui,
+          previewQualityMode: nextMode,
+        },
+      });
+
+      const nextState = store.getState();
+      renderer.setRenderScale(getEffectiveRenderScale(nextState));
+      if (nextState.imageLoaded && originalRasterSource) {
+        rebuildPreviewFromOriginal(getRequestedPreviewMaxDim(nextState));
+        handleResize();
+      }
+    });
+  }
+
   // Undo/Redo
   const undoBtn = document.getElementById('undo-btn');
   const redoBtn = document.getElementById('redo-btn');
   if (undoBtn) undoBtn.addEventListener('click', handleUndoAction);
   if (redoBtn) redoBtn.addEventListener('click', handleRedoAction);
+}
 
-  // Canvas click for color picker
-  const glCanvas = document.getElementById('gl-canvas');
-  if (glCanvas) {
-    const pickAtClient = (clientX: number, clientY: number) => {
-      const state = store.getState();
-      if (!state.ui.colorPickerActive || !state.imageLoaded || state.ui.activeLayer !== 'mapping') return;
-
-      const rect = glCanvas.getBoundingClientRect();
-      const nx = (clientX - rect.left) / rect.width;
-      const ny = (clientY - rect.top) / rect.height;
-      const px = Math.max(0, Math.min(previewCanvas ? previewCanvas.width - 1 : 0, Math.round(nx * (previewCanvas?.width ?? 0))));
-      const py = Math.max(0, Math.min(previewCanvas ? previewCanvas.height - 1 : 0, Math.round(ny * (previewCanvas?.height ?? 0))));
-
-      store.update({
-        ui: {
-          ...state.ui,
-          colorPickerCoord: { x: px, y: py },
-        },
-      });
-
-      const color = renderer.pickColor(nx, ny, state.ui.colorPickerRadiusPx);
-      if (color) {
-        const [h, s, _v] = rgbToHsv(color[0], color[1], color[2]);
-        handleColorPicked(h, s);
-      }
-    };
-
-    glCanvas.addEventListener('click', (e) => {
-      pickAtClient(e.clientX, e.clientY);
-    });
-
-    glCanvas.addEventListener('pointerup', (e) => {
-      if (e.pointerType === 'mouse') return;
-      e.preventDefault();
-      pickAtClient(e.clientX, e.clientY);
-    });
+function pickPreviewColorAtClient(clientX: number, clientY: number): void {
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  if (!glCanvas) {
+    return;
   }
+
+  const state = store.getState();
+  if (!state.ui.colorPickerActive || !state.imageLoaded || state.ui.activeLayer !== 'mapping') {
+    return;
+  }
+
+  const rect = glCanvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return;
+  }
+
+  const nx = (clientX - rect.left) / rect.width;
+  const ny = (clientY - rect.top) / rect.height;
+  const px = Math.max(0, Math.min(previewCanvas ? previewCanvas.width - 1 : 0, Math.round(nx * (previewCanvas?.width ?? 0))));
+  const py = Math.max(0, Math.min(previewCanvas ? previewCanvas.height - 1 : 0, Math.round(ny * (previewCanvas?.height ?? 0))));
+
+  store.update({
+    ui: {
+      ...state.ui,
+      colorPickerCoord: { x: px, y: py },
+    },
+  });
+
+  const color = renderer.pickColor(nx, ny, state.ui.colorPickerRadiusPx);
+  if (color) {
+    const [h, s, _v] = rgbToHsv(color[0], color[1], color[2]);
+    handleColorPicked(h, s);
+  }
+}
+
+function togglePreviewControlsDividerPromotion(): void {
+  const state = store.getState();
+  if (!state.imageLoaded || !isMobileCompactViewport() || getCurrentLayoutMode() !== 'image-priority') {
+    return;
+  }
+
+  const divider = document.getElementById('preview-controls-divider') as HTMLElement | null;
+  if (!divider?.classList.contains('active')) {
+    return;
+  }
+
+  setPreviewControlsDividerPromoted(!_previewControlsDividerPromoted);
+}
+
+function handlePreviewSurfaceTap(clientX: number, clientY: number, pointerType: 'mouse' | 'touch' | 'pen'): void {
+  const state = store.getState();
+  if (!state.imageLoaded) {
+    return;
+  }
+
+  if (state.ui.colorPickerActive && state.ui.activeLayer === 'mapping') {
+    pickPreviewColorAtClient(clientX, clientY);
+    return;
+  }
+
+  if (pointerType === 'mouse' || pointerType === 'touch' || pointerType === 'pen') {
+    togglePreviewControlsDividerPromotion();
+  }
+}
+
+function setupPreviewCanvasInteractions(): void {
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  if (!glCanvas) {
+    return;
+  }
+
+  let tapTouchId: number | null = null;
+  let tapStartX = 0;
+  let tapStartY = 0;
+  let tapMoved = false;
+  let pinchState: PreviewPinchState | null = null;
+
+  const getTouchPoints = (touches: TouchList): Array<{ id: number; clientX: number; clientY: number }> =>
+    Array.from(touches).map((touch) => ({
+      id: touch.identifier,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+    }));
+
+  const beginPinch = (touches: TouchList): void => {
+    const touchPoints = getTouchPoints(touches);
+    if (touchPoints.length < 2) {
+      pinchState = null;
+      return;
+    }
+
+    const [first, second] = touchPoints;
+    const metrics = getPreviewCanvasMetrics();
+    if (!metrics) {
+      pinchState = null;
+      return;
+    }
+
+    const centerX = (first.clientX + second.clientX) / 2;
+    const centerY = (first.clientY + second.clientY) / 2;
+    const distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+    pinchState = {
+      pointerIds: [first.id, second.id],
+      initialDistance: Math.max(distance, 1),
+      initialScale: previewZoomScale,
+      anchorX: (centerX - metrics.centerX - previewTranslateX) / Math.max(previewZoomScale, PREVIEW_ZOOM_MIN),
+      anchorY: (centerY - metrics.centerY - previewTranslateY) / Math.max(previewZoomScale, PREVIEW_ZOOM_MIN),
+    };
+  };
+
+  const updatePinch = (touches: TouchList): void => {
+    if (!pinchState) {
+      return;
+    }
+
+    const touchPoints = getTouchPoints(touches);
+    const first = touchPoints.find((touch) => touch.id === pinchState?.pointerIds[0]);
+    const second = touchPoints.find((touch) => touch.id === pinchState?.pointerIds[1]);
+    const metrics = getPreviewCanvasMetrics();
+    if (!first || !second || !metrics) {
+      beginPinch(touches);
+      return;
+    }
+
+    const centerX = (first.clientX + second.clientX) / 2;
+    const centerY = (first.clientY + second.clientY) / 2;
+    const distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+    const nextScale = pinchState.initialScale * (distance / pinchState.initialDistance);
+    const nextTranslateX = centerX - metrics.centerX - pinchState.anchorX * nextScale;
+    const nextTranslateY = centerY - metrics.centerY - pinchState.anchorY * nextScale;
+    setPreviewTransform(nextScale, nextTranslateX, nextTranslateY);
+  };
+
+  glCanvas.addEventListener('click', (event) => {
+    if (Date.now() - previewLastTouchInteractionAt < 700) {
+      return;
+    }
+    handlePreviewSurfaceTap(event.clientX, event.clientY, 'mouse');
+  });
+
+  glCanvas.addEventListener('touchstart', (event) => {
+    if (!store.getState().imageLoaded) {
+      return;
+    }
+
+    previewLastTouchInteractionAt = Date.now();
+    event.preventDefault();
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      tapTouchId = touch.identifier;
+      tapStartX = touch.clientX;
+      tapStartY = touch.clientY;
+      tapMoved = false;
+      pinchState = null;
+      return;
+    }
+
+    tapTouchId = null;
+    tapMoved = true;
+    beginPinch(event.touches);
+    updatePinch(event.touches);
+  }, { passive: false });
+
+  glCanvas.addEventListener('touchmove', (event) => {
+    if (event.touches.length === 0) {
+      return;
+    }
+
+    previewLastTouchInteractionAt = Date.now();
+    event.preventDefault();
+
+    if (!tapMoved && tapTouchId !== null) {
+      const activeTouch = Array.from(event.touches).find((touch) => touch.identifier === tapTouchId);
+      if (activeTouch) {
+        tapMoved = Math.hypot(activeTouch.clientX - tapStartX, activeTouch.clientY - tapStartY) > PREVIEW_TAP_MOVE_THRESHOLD;
+      }
+    }
+
+    if (event.touches.length >= 2) {
+      tapMoved = true;
+      const activeTouchIds = new Set(Array.from(event.touches).map((touch) => touch.identifier));
+      if (!pinchState
+        || !activeTouchIds.has(pinchState.pointerIds[0])
+        || !activeTouchIds.has(pinchState.pointerIds[1])) {
+        beginPinch(event.touches);
+      }
+      updatePinch(event.touches);
+    }
+  }, { passive: false });
+
+  glCanvas.addEventListener('touchend', (event) => {
+    previewLastTouchInteractionAt = Date.now();
+    const changedTouches = Array.from(event.changedTouches);
+    const endedTap = tapTouchId !== null
+      ? changedTouches.find((touch) => touch.identifier === tapTouchId)
+      : null;
+    const wasSingleTap = !!endedTap && event.touches.length === 0 && !tapMoved && !pinchState;
+
+    if (event.touches.length < 2) {
+      pinchState = null;
+    } else {
+      beginPinch(event.touches);
+    }
+
+    if (wasSingleTap && endedTap) {
+      handlePreviewSurfaceTap(endedTap.clientX, endedTap.clientY, 'touch');
+    }
+
+    if (endedTap) {
+      tapTouchId = null;
+    }
+  }, { passive: false });
+
+  glCanvas.addEventListener('touchcancel', (event) => {
+    previewLastTouchInteractionAt = Date.now();
+    event.preventDefault();
+    if (event.touches.length < 2) {
+      pinchState = null;
+    } else {
+      beginPinch(event.touches);
+    }
+    tapTouchId = null;
+    tapMoved = false;
+  }, { passive: false });
 }
 
 function setupSplitDivider(): void {
@@ -1388,13 +1829,30 @@ function applyPreviewControlsSplit(state: AppState): void {
   if (!isMobileCompactViewport()) {
     app.style.removeProperty('--preview-controls-ratio');
     app.style.removeProperty('--controls-flex-ratio');
+    controls.classList.remove('compact-idle');
     divider.classList.remove('active');
+    setPreviewControlsDividerPromoted(false);
     return;
   }
 
   const layoutMode = getCurrentLayoutMode();
-  const dividerVisible = layoutMode === 'image-priority' && state.imageLoaded;
+  const keepControlsVisible = layoutMode !== 'image-priority' || shouldKeepMobileControlsVisible(state);
+  const dividerVisible = layoutMode === 'image-priority' && state.imageLoaded && keepControlsVisible;
+  controls.classList.toggle('compact-idle', layoutMode === 'image-priority' && !keepControlsVisible);
   divider.classList.toggle('active', dividerVisible);
+  if (!dividerVisible) {
+    setPreviewControlsDividerPromoted(false);
+  } else {
+    syncPreviewControlsDividerLayer();
+  }
+
+  if (layoutMode === 'image-priority' && !keepControlsVisible) {
+    app.style.setProperty('--preview-controls-ratio', '1');
+    app.style.setProperty('--controls-flex-ratio', '0');
+    controls.classList.remove('full-preview');
+    return;
+  }
+
   const storedRatio = layoutMode === 'image-priority'
     ? state.ui.imagePriorityPreviewRatio
     : state.ui.controlsPriorityPreviewRatio;
@@ -2238,7 +2696,7 @@ function setupExport(): void {
 }
 
 function exportImage(): void {
-  if (!originalImage) return;
+  if (!originalRasterSource) return;
 
   const state = store.getState();
   const exportState: AppState = {
@@ -2249,21 +2707,18 @@ function exportImage(): void {
     },
   };
 
-  // Create temporary full-resolution canvas
+  const exportSource = scaleRasterSourceToMaxDim(originalRasterSource, 4096);
   const offCanvas = document.createElement('canvas');
-  const maxExport = Math.min(originalImage.naturalWidth, 4096);
-  const scale = maxExport / Math.max(originalImage.naturalWidth, originalImage.naturalHeight);
-  offCanvas.width = Math.floor(originalImage.naturalWidth * Math.min(scale, 1));
-  offCanvas.height = Math.floor(originalImage.naturalHeight * Math.min(scale, 1));
+  offCanvas.width = getRasterWidth(exportSource);
+  offCanvas.height = getRasterHeight(exportSource);
 
   try {
     const exportRenderer = new Renderer(offCanvas);
-    exportRenderer.loadImage(originalImage);
+    exportRenderer.loadImage(exportSource);
     exportRenderer.setToneCurveLut(buildToneCurveLut());
     exportRenderer.updateUniforms(exportState);
     exportRenderer.render();
 
-    // Download
     offCanvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -3094,24 +3549,26 @@ function handleDragEnd(): void {
 
 function setupPerformanceMonitor(): void {
   renderer.onFps((fps) => {
+    const state = store.getState();
+    if (state.ui.previewQualityMode === 'full') {
+      return;
+    }
+
     // Auto-downgrade resolution if needed
     if (fps < 20) {
       const loweredScale = Math.max(0.55, renderer.getRenderScale() - 0.1);
       renderer.setRenderScale(loweredScale);
 
-      const state = store.getState();
-      if (state.ui.previewResolution > 512 && previewCanvas && originalImage) {
+      if (state.ui.previewResolution > 512 && previewCanvas && originalRasterSource) {
         const newRes = state.ui.previewResolution === 1080 ? 720 : 512;
         store.update({
           ui: { ...state.ui, previewResolution: newRes as 1080 | 720 | 512 },
         });
-        previewCanvas = scaleImageToCanvas(originalImage, newRes);
-        refreshDominantImageHues();
-        renderer.setRenderScale(Math.min(renderer.getRenderScale(), getAdaptiveRenderScale()));
-        renderer.loadImage(previewCanvas);
+        rebuildPreviewFromOriginal(newRes);
+        renderer.setRenderScale(Math.min(renderer.getRenderScale(), getEffectiveRenderScale(store.getState())));
       }
     } else if (fps > 40) {
-      renderer.setRenderScale(getAdaptiveRenderScale());
+      renderer.setRenderScale(getEffectiveRenderScale(state));
     }
   });
 }
@@ -3349,7 +3806,7 @@ function updateCapabilitiesDisplay(): void {
   const el = document.getElementById('capabilities');
   if (el && renderer) {
     const cap = renderer.capabilities;
-    el.textContent = `WebGL ${cap.webgl2 ? '2.0' : '1.0'} | Max mappings: ${cap.maxMappings}`;
+    el.textContent = `WebGL ${cap.webgl2 ? '2.0' : '1.0'} | Max mappings: ${cap.maxMappings} | RAW 16-bit: ${cap.losslessRawImport ? 'yes' : 'no'}`;
   }
 }
 
@@ -3370,7 +3827,7 @@ function handleResize(): void {
   // ensure drop zone hidden when image present
   if (dropZoneEl) dropZoneEl.style.display = 'none';
 
-  renderer.setRenderScale(getAdaptiveRenderScale());
+  renderer.setRenderScale(getEffectiveRenderScale(state));
   applyPreviewControlsSplit(state);
   colorWheel.resize();
   requestUiRender('wheel');
@@ -3397,6 +3854,7 @@ function handleResize(): void {
       glCanvas.style.width = Math.floor(cssW) + 'px';
       glCanvas.style.height = Math.floor(cssH) + 'px';
       renderer.resize(previewCanvas.width, previewCanvas.height);
+      syncPreviewTransformToLayout();
       renderer.updateUniforms(state);
       renderer.render();
     }
@@ -3495,6 +3953,7 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
 
 
 

@@ -5,6 +5,7 @@
 
 export type LayerType = 'calibration' | 'mapping' | 'toning';
 export type WorkingColorSpace = 'linear-srgb' | 'acescg';
+export type PreviewQualityMode = 'adaptive' | 'full';
 
 export interface LocalMapping {
   id: string;
@@ -45,6 +46,7 @@ export interface UIState {
   activeLayer: LayerType;
   selectedMappingId: string | null;
   previewResolution: 1080 | 720 | 512;
+  previewQualityMode: PreviewQualityMode;
   workingColorSpace: WorkingColorSpace;
   gamutCompressionEnabled: boolean;
   splitView: boolean;
@@ -159,6 +161,7 @@ export function createInitialState(): AppState {
       activeLayer: 'calibration',
       selectedMappingId: null,
       previewResolution: 1080,
+      previewQualityMode: 'adaptive',
       workingColorSpace: 'linear-srgb',
       gamutCompressionEnabled: true,
       splitView: false,
