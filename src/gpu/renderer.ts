@@ -9,11 +9,19 @@ import {
 import type { AppState } from '../state/types';
 import { identityMat3, buildCalibrationMatrix } from '../core/matrix/operations';
 import type { Mat3 } from '../core/matrix/operations';
+import { createBitmapRasterSource, isRawRasterSource, type RasterSource } from '../core/image/rasterSource';
+
+type TextureNorm16Extension = {
+  RGBA16_EXT: number;
+};
+
+type RendererImageSource = RasterSource | HTMLImageElement | ImageBitmap | HTMLCanvasElement;
 
 export interface RendererCapabilities {
   webgl2: boolean;
   maxTextureSize: number;
   maxMappings: number;
+  losslessRawImport: boolean;
 }
 
 export class Renderer {
@@ -47,6 +55,7 @@ export class Renderer {
   // Cached matrix to avoid recalculation
   private cachedCalibrationMatrix: Mat3 = identityMat3();
   private readonly toneCurveLutSize = 256;
+  private textureNorm16Ext: TextureNorm16Extension | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -89,10 +98,14 @@ export class Renderer {
     }
 
     this.gl = gl;
+    this.textureNorm16Ext = this.isWebGL2
+      ? (gl.getExtension('EXT_texture_norm16') as TextureNorm16Extension | null)
+      : null;
     this._capabilities = {
       webgl2: this.isWebGL2,
       maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
       maxMappings: this.isWebGL2 ? 8 : 4,
+      losslessRawImport: !!this.textureNorm16Ext,
     };
 
     this.initShaders();
@@ -260,8 +273,13 @@ export class Renderer {
     this.needsRender = true;
   }
 
-  loadImage(image: HTMLImageElement | ImageBitmap | HTMLCanvasElement): void {
+  loadImage(image: RendererImageSource): void {
     const gl = this.gl;
+    const rasterSource = image instanceof HTMLImageElement
+      || image instanceof HTMLCanvasElement
+      || image instanceof ImageBitmap
+      ? createBitmapRasterSource(image)
+      : image;
 
     if (this.imageTexture) {
       gl.deleteTexture(this.imageTexture);
@@ -274,12 +292,31 @@ export class Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    if (isRawRasterSource(rasterSource)) {
+      if (!this.isWebGL2 || !this.textureNorm16Ext) {
+        throw new Error('Lossless RAW import requires WebGL2 with EXT_texture_norm16 support.');
+      }
 
-    this._imageWidth = image.width;
-    this._imageHeight = image.height;
-    this.logicalWidth = image.width;
-    this.logicalHeight = image.height;
+      const gl2 = gl as WebGL2RenderingContext;
+      gl2.texImage2D(
+        gl2.TEXTURE_2D,
+        0,
+        this.textureNorm16Ext.RGBA16_EXT,
+        rasterSource.width,
+        rasterSource.height,
+        0,
+        gl2.RGBA,
+        gl2.UNSIGNED_SHORT,
+        rasterSource.data,
+      );
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, rasterSource.bitmap);
+    }
+
+    this._imageWidth = rasterSource.width;
+    this._imageHeight = rasterSource.height;
+    this.logicalWidth = rasterSource.width;
+    this.logicalHeight = rasterSource.height;
     this.needsRender = true;
   }
 

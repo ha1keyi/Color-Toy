@@ -12,6 +12,15 @@ import type { AppState, LocalMapping } from './state/types';
 import { Renderer } from './gpu/renderer';
 import { ColorWheel } from './ui/wheel/colorWheel';
 import { rgbToHsv } from './core/color/conversions';
+import { decodeRawFile, isSupportedRawFile } from './core/image/rawDecoder';
+import {
+  buildPreviewRasterAssets,
+  createBitmapRasterSource,
+  getRasterHeight,
+  getRasterWidth,
+  scaleRasterSourceToMaxDim,
+  type RasterSource,
+} from './core/image/rasterSource';
 import {
   BUILTIN_PRESETS, getStoredPresets, savePreset,
   createColorStylePreset, createCreativeMappingPreset,
@@ -37,7 +46,8 @@ import { setupLayoutProfileManager } from './ui/layout/layoutProfileManager';
 // DOM references
 let renderer: Renderer;
 let colorWheel: ColorWheel;
-let originalImage: HTMLImageElement | null = null;
+let originalRasterSource: RasterSource | null = null;
+let previewRasterSource: RasterSource | null = null;
 let previewCanvas: HTMLCanvasElement | null = null;
 let renderedWheelCanvas: HTMLCanvasElement | null = null;
 let dominantImageHues: number[] = [];
@@ -711,7 +721,7 @@ function setupImageInput(): void {
   if (input) {
     input.addEventListener('change', (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) loadImageFile(file);
+      if (file) void loadImageFile(file);
     });
   }
 
@@ -727,7 +737,7 @@ function setupImageInput(): void {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
       const file = e.dataTransfer?.files[0];
-      if (file) loadImageFile(file);
+      if (file) void loadImageFile(file);
     });
   }
 }
@@ -791,10 +801,32 @@ async function readIccProfileFromFile(file: File): Promise<{ name: string | null
   return { name: null, source: null };
 }
 
-function loadImageFile(file: File): void {
-  if (!file.type.startsWith('image/')) return;
-  if (!renderer) {
-    showError('Renderer is not initialized, image cannot be processed.');
+async function loadBitmapRasterSource(file: File): Promise<RasterSource> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to decode image file ${file.name}.`));
+      img.src = objectUrl;
+    });
+
+    return createBitmapRasterSource(image);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function updateImportedProfileState(file: File): void {
+  if (isSupportedRawFile(file)) {
+    const state = store.getState();
+    store.update({
+      ui: {
+        ...state.ui,
+        importedIccProfileName: null,
+        importedIccSource: null,
+      },
+    });
     return;
   }
 
@@ -819,68 +851,86 @@ function loadImageFile(file: File): void {
         },
       });
     });
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      originalImage = img;
-
-      // Create preview canvas (long edge <= resolution limit)
-      const maxDim = store.getState().ui.previewResolution;
-      previewCanvas = scaleImageToCanvas(img, maxDim);
-      refreshDominantImageHues();
-
-      // Size the GL canvas to match image resolution
-      const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
-      renderer.setRenderScale(getAdaptiveRenderScale());
-      renderer.resize(previewCanvas.width, previewCanvas.height);
-
-      // Set CSS size to fit container
-      const container = document.getElementById('preview-container');
-      if (container && glCanvas) {
-        const rect = container.getBoundingClientRect();
-        const aspect = previewCanvas.width / previewCanvas.height;
-        let cssW = rect.width;
-        let cssH = cssW / aspect;
-        if (cssH > rect.height) {
-          cssH = rect.height;
-          cssW = cssH * aspect;
-        }
-        glCanvas.style.width = Math.floor(cssW) + 'px';
-        glCanvas.style.height = Math.floor(cssH) + 'px';
-      }
-
-      renderer.loadImage(previewCanvas);
-      const state = store.getState();
-      renderer.updateUniforms(state);
-      renderer.render();
-
-      store.update({ imageLoaded: true });
-
-      // Hide drop zone, show canvas
-      const dropZone = document.getElementById('drop-zone');
-      if (dropZone) dropZone.style.display = 'none';
-      if (glCanvas) glCanvas.style.display = 'block';
-    };
-    img.src = e.target?.result as string;
-  };
-  reader.readAsDataURL(file);
 }
 
-function scaleImageToCanvas(img: HTMLImageElement, maxDim: number): HTMLCanvasElement {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
-  const scale = Math.min(maxDim / Math.max(w, h), 1);
+function sizePreviewCanvas(width: number, height: number): void {
+  const container = document.getElementById('preview-container');
+  const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+  if (!container || !glCanvas) {
+    return;
+  }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.floor(w * scale);
-  canvas.height = Math.floor(h * scale);
+  const rect = container.getBoundingClientRect();
+  const aspect = width / height;
+  let cssW = rect.width;
+  let cssH = cssW / aspect;
+  if (cssH > rect.height) {
+    cssH = rect.height;
+    cssW = cssH * aspect;
+  }
+  glCanvas.style.width = Math.floor(cssW) + 'px';
+  glCanvas.style.height = Math.floor(cssH) + 'px';
+}
 
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+function renderPreviewSource(): void {
+  if (!previewRasterSource) {
+    return;
+  }
 
-  return canvas;
+  renderer.resize(previewRasterSource.width, previewRasterSource.height);
+  sizePreviewCanvas(previewRasterSource.width, previewRasterSource.height);
+  renderer.loadImage(previewRasterSource);
+  const state = store.getState();
+  renderer.updateUniforms(state);
+  renderer.render();
+}
+
+function rebuildPreviewFromOriginal(maxDim: number): void {
+  if (!originalRasterSource) {
+    return;
+  }
+
+  const previewAssets = buildPreviewRasterAssets(originalRasterSource, maxDim);
+  previewRasterSource = previewAssets.renderSource;
+  previewCanvas = previewAssets.analysisCanvas;
+  refreshDominantImageHues();
+  renderPreviewSource();
+}
+
+async function loadImageFile(file: File): Promise<void> {
+  const rawFile = isSupportedRawFile(file);
+  if (!rawFile && !file.type.startsWith('image/')) return;
+  if (!renderer) {
+    showError('Renderer is not initialized, image cannot be processed.');
+    return;
+  }
+
+  if (rawFile && !renderer.capabilities.losslessRawImport) {
+    showError('This browser or GPU does not support 16-bit RAW texture upload. Lossless RAW import requires WebGL2 with EXT_texture_norm16.');
+    return;
+  }
+
+  updateImportedProfileState(file);
+
+  try {
+    originalRasterSource = rawFile
+      ? await decodeRawFile(file)
+      : await loadBitmapRasterSource(file);
+
+    renderer.setRenderScale(getAdaptiveRenderScale());
+    rebuildPreviewFromOriginal(store.getState().ui.previewResolution);
+    store.update({ imageLoaded: true });
+
+    const glCanvas = document.getElementById('gl-canvas') as HTMLCanvasElement | null;
+    const dropZone = document.getElementById('drop-zone');
+    if (dropZone) dropZone.style.display = 'none';
+    if (glCanvas) glCanvas.style.display = 'block';
+  } catch (error) {
+    console.error('Image load failed:', error);
+    showError(`Failed to load ${file.name}. ${rawFile
+      ? 'Lossless RAW import currently supports CR2, CR3, and NEF on WebGL2 browsers with 16-bit texture support.'
+      : 'Please choose a valid image file.'}`);
+  }
 }
 
 function normalizeHue01(h: number): number {
@@ -2238,7 +2288,7 @@ function setupExport(): void {
 }
 
 function exportImage(): void {
-  if (!originalImage) return;
+  if (!originalRasterSource) return;
 
   const state = store.getState();
   const exportState: AppState = {
@@ -2249,21 +2299,18 @@ function exportImage(): void {
     },
   };
 
-  // Create temporary full-resolution canvas
+  const exportSource = scaleRasterSourceToMaxDim(originalRasterSource, 4096);
   const offCanvas = document.createElement('canvas');
-  const maxExport = Math.min(originalImage.naturalWidth, 4096);
-  const scale = maxExport / Math.max(originalImage.naturalWidth, originalImage.naturalHeight);
-  offCanvas.width = Math.floor(originalImage.naturalWidth * Math.min(scale, 1));
-  offCanvas.height = Math.floor(originalImage.naturalHeight * Math.min(scale, 1));
+  offCanvas.width = getRasterWidth(exportSource);
+  offCanvas.height = getRasterHeight(exportSource);
 
   try {
     const exportRenderer = new Renderer(offCanvas);
-    exportRenderer.loadImage(originalImage);
+    exportRenderer.loadImage(exportSource);
     exportRenderer.setToneCurveLut(buildToneCurveLut());
     exportRenderer.updateUniforms(exportState);
     exportRenderer.render();
 
-    // Download
     offCanvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -3100,15 +3147,13 @@ function setupPerformanceMonitor(): void {
       renderer.setRenderScale(loweredScale);
 
       const state = store.getState();
-      if (state.ui.previewResolution > 512 && previewCanvas && originalImage) {
+      if (state.ui.previewResolution > 512 && previewCanvas && originalRasterSource) {
         const newRes = state.ui.previewResolution === 1080 ? 720 : 512;
         store.update({
           ui: { ...state.ui, previewResolution: newRes as 1080 | 720 | 512 },
         });
-        previewCanvas = scaleImageToCanvas(originalImage, newRes);
-        refreshDominantImageHues();
+        rebuildPreviewFromOriginal(newRes);
         renderer.setRenderScale(Math.min(renderer.getRenderScale(), getAdaptiveRenderScale()));
-        renderer.loadImage(previewCanvas);
       }
     } else if (fps > 40) {
       renderer.setRenderScale(getAdaptiveRenderScale());
@@ -3349,7 +3394,7 @@ function updateCapabilitiesDisplay(): void {
   const el = document.getElementById('capabilities');
   if (el && renderer) {
     const cap = renderer.capabilities;
-    el.textContent = `WebGL ${cap.webgl2 ? '2.0' : '1.0'} | Max mappings: ${cap.maxMappings}`;
+    el.textContent = `WebGL ${cap.webgl2 ? '2.0' : '1.0'} | Max mappings: ${cap.maxMappings} | RAW 16-bit: ${cap.losslessRawImport ? 'yes' : 'no'}`;
   }
 }
 
@@ -3495,6 +3540,7 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
 
 
 

@@ -12,10 +12,10 @@
   <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg">
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <title>Color Toy</title>
-  <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/bootstrap.ts"></script>
   <script>
     (() => {
-      const devEntry = document.querySelector('script[type="module"][src="/src/main.ts"]');
+      const devEntry = document.querySelector('script[type="module"][src="/src/bootstrap.ts"]');
       if (!devEntry || !('serviceWorker' in navigator)) {
         return;
       }
@@ -138,9 +138,9 @@
           </svg>
           <p>Drop image here or</p>
           <button id="load-image-btn" class="primary-btn">Choose Image</button>
-          <p class="hint">JPG, PNG, WebP</p>
+          <p class="hint">JPG, PNG, WebP, CR2, CR3, NEF</p>
         </div>
-        <input type="file" id="image-input" accept="image/jpeg,image/png,image/webp" hidden>
+        <input type="file" id="image-input" accept="image/jpeg,image/png,image/webp,.cr2,.cr3,.nef" hidden>
       </div>
       <canvas id="gl-canvas" style="display:none"></canvas>
       <div id="split-divider" style="display:none" aria-label="Split Divider" title="Drag to adjust split compare"
