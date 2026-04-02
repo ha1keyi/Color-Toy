@@ -54,6 +54,7 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
   const calibrationActive = state.ui.activeLayer === 'calibration';
   const imagePriorityMobile = deps.isImagePriorityMobileMode();
   const showMiniWheelPreview = imagePriorityMobile
+    && state.imageLoaded
     && deps.mobileModuleSelection !== 'wheels'
     && deps.wheelMiniMode !== 'hidden';
 
@@ -167,6 +168,20 @@ export function updatePanelState(state: AppState, deps: PanelStateDeps): void {
         ? (state.ui.splitView ? 'Disable split compare' : 'Enable split compare')
         : 'Load an image to enable split compare',
     );
+  }
+
+  const previewQualityBtn = document.getElementById('preview-quality-btn') as HTMLButtonElement | null;
+  if (previewQualityBtn) {
+    const fullQuality = state.ui.previewQualityMode === 'full';
+    previewQualityBtn.classList.toggle('active', fullQuality);
+    previewQualityBtn.setAttribute('aria-pressed', String(fullQuality));
+    const label = previewQualityBtn.querySelector('span') || previewQualityBtn;
+    label.textContent = fullQuality ? 'Preview: Full' : 'Preview: Auto';
+    const nextAction = fullQuality
+      ? 'Switch preview quality back to adaptive mode'
+      : 'Switch preview quality to full resolution';
+    previewQualityBtn.title = nextAction;
+    previewQualityBtn.setAttribute('aria-label', nextAction);
   }
 
   const layoutToggleBtn = document.getElementById('layout-toggle-btn') as HTMLButtonElement | null;

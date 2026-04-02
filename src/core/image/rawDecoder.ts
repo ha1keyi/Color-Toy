@@ -44,7 +44,7 @@ const DEFAULT_RAW_SETTINGS: LibRawOpenSettings = {
   userQual: 3,
 };
 
-let decoderPromise: Promise<LibRawInstance> | null = null;
+let decoderCtorPromise: Promise<LibRawConstructor> | null = null;
 
 function getFileExtension(fileName: string): string {
   const lastDot = fileName.lastIndexOf('.');
@@ -137,14 +137,21 @@ function convertRgbBufferToRgba16(buffer: RawPixelBuffer, width: number, height:
   return rgba;
 }
 
-async function getDecoder(): Promise<LibRawInstance> {
-  if (!decoderPromise) {
-    decoderPromise = import('libraw-wasm').then((module) => {
-      const LibRaw = module.default as LibRawConstructor;
-      return new LibRaw();
-    });
+async function getDecoderConstructor(): Promise<LibRawConstructor> {
+  if (!decoderCtorPromise) {
+    decoderCtorPromise = import('libraw-wasm')
+      .then((module) => module.default as LibRawConstructor)
+      .catch((error) => {
+        decoderCtorPromise = null;
+        throw error;
+      });
   }
-  return decoderPromise;
+  return decoderCtorPromise;
+}
+
+async function createDecoder(): Promise<LibRawInstance> {
+  const LibRaw = await getDecoderConstructor();
+  return new LibRaw();
 }
 
 export function isSupportedRawFile(file: File): boolean {
@@ -160,7 +167,7 @@ export async function decodeRawFile(file: File): Promise<DecodedRawImage> {
     throw new Error('Unsupported RAW format. Supported formats: CR2, CR3, NEF.');
   }
 
-  const decoder = await getDecoder();
+  const decoder = await createDecoder();
   const bytes = new Uint8Array(await file.arrayBuffer());
   await decoder.open(bytes, DEFAULT_RAW_SETTINGS);
 
